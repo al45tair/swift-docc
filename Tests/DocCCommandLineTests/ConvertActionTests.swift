@@ -321,7 +321,7 @@ class ConvertActionTests: XCTestCase {
         let targetDirectory = URL(fileURLWithPath: testDataProvider.currentDirectoryPath)
             .appendingPathComponent("target", isDirectory: true)
         
-        let action = try ConvertAction(
+        let _ = try ConvertAction(
             documentationBundleURL: source.absoluteURL,
             outOfProcessResolver: nil,
             analyze: false,
@@ -334,7 +334,7 @@ class ConvertActionTests: XCTestCase {
         
         let targetURL = target.absoluteURL.appendingPathComponent("output")
         
-        XCTAssertNoThrow(try action.moveOutput(from: source.absoluteURL, to: targetURL))
+        XCTAssertNoThrow(try ConvertAction.moveOutput(from: source.absoluteURL, to: targetURL, fileManager: testDataProvider))
         XCTAssertTrue(testDataProvider.fileExists(atPath: targetURL.path, isDirectory: nil))
         XCTAssertFalse(testDataProvider.fileExists(atPath: source.absoluteURL.path, isDirectory: nil))
     }
@@ -355,7 +355,7 @@ class ConvertActionTests: XCTestCase {
         let targetDirectory = URL(fileURLWithPath: testDataProvider.currentDirectoryPath)
             .appendingPathComponent("target", isDirectory: true)
         
-        let action = try ConvertAction(
+        let _ = try ConvertAction(
             documentationBundleURL: source.absoluteURL,
             outOfProcessResolver: nil,
             analyze: false,
@@ -368,7 +368,7 @@ class ConvertActionTests: XCTestCase {
         
         let targetURL = target.absoluteURL.appendingPathComponent("target").appendingPathComponent("output")
         
-        XCTAssertThrowsError(try action.moveOutput(from: source.absoluteURL, to: targetURL))
+        XCTAssertThrowsError(try ConvertAction.moveOutput(from: source.absoluteURL, to: targetURL, fileManager: testDataProvider))
     }
 
     func testConvertDoesNotLowercasesResourceFileNames() async throws {

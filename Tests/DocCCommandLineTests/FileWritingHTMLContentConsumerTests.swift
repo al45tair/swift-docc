@@ -172,6 +172,7 @@ final class FileWritingHTMLContentConsumerTests: XCTestCase {
         let htmlConsumer = try FileWritingHTMLContentConsumer(
             targetFolder: URL(fileURLWithPath: "/output-dir"),
             fileManager: fileSystem,
+            outputFileManager: fileSystem,
             htmlTemplate: URL(fileURLWithPath: "/template/index.html"),
             customHeader: nil,
             customFooter: nil,
@@ -521,6 +522,7 @@ final class FileWritingHTMLContentConsumerTests: XCTestCase {
                 let htmlConsumer = try FileWritingHTMLContentConsumer(
                     targetFolder: URL(fileURLWithPath: "/output-dir"),
                     fileManager: fileSystem,
+                    outputFileManager: fileSystem,
                     htmlTemplate: URL(fileURLWithPath: "/template/index.html"),
                     customHeader: nil,
                     customFooter: nil,

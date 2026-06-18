@@ -334,6 +334,28 @@ package class TestFileSystem: FileManagerProtocol {
         )
     }
 
+    package func sizeOfDirectory(
+        at url: URL,
+        options: FileManager.DirectoryEnumerationOptions
+    ) throws -> Int64 {
+        filesLock.lock()
+        defer {
+            filesLock.unlock()
+        }
+
+        var total: Int64 = 0
+
+        let path = url.path.appendingTrailingSlash
+
+        for (subpath, item) in files where subpath.hasPrefix(path) {
+            if case let .file(data) = item {
+                total += Int64(data.count)
+            }
+        }
+
+        return total
+    }
+
     package func uniqueTemporaryDirectory() -> URL {
         URL(fileURLWithPath: "/tmp/\(ProcessInfo.processInfo.globallyUniqueString)", isDirectory: true)
     }

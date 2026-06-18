@@ -33,6 +33,7 @@ struct FullPageHTMLContentConsumer: HTMLContentConsumer {
     init(
         targetFolder: URL,
         fileManager: some FileManagerProtocol,
+        outputFileManager: some FileManagerProtocol,
         customHeader: URL?,
         customFooter: URL?
     ) throws {
@@ -40,7 +41,7 @@ struct FullPageHTMLContentConsumer: HTMLContentConsumer {
         
         self.fileWriter = JSONEncodingRenderNodeWriter(
             targetFolder: targetFolder,
-            fileManager: fileManager,
+            fileManager: outputFileManager,
             transformForStaticHostingIndexHTML: nil
         )
     }

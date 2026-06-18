@@ -52,6 +52,7 @@ class RamDiskFileManager: FileManagerProtocol {
 
     var root = Item(attributes: [:], kind: .directory([:]))
     var cwd: String = "/"
+    var lock = NSLock()
 
     func normalized(path: String) -> [String]? {
         var normalized: [String] = []
@@ -112,6 +113,9 @@ class RamDiskFileManager: FileManagerProtocol {
     }
 
     public func contents(atPath path: String) -> Data? {
+        lock.lock()
+        defer { lock.unlock() }
+
         guard let item = item(at: path) else {
             return nil
         }
@@ -138,6 +142,9 @@ class RamDiskFileManager: FileManagerProtocol {
         atPath path: String,
         isDirectory: UnsafeMutablePointer<ObjCBool>?
     ) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+
         guard let item = item(at: path) else {
             return false
         }
@@ -150,6 +157,9 @@ class RamDiskFileManager: FileManagerProtocol {
     }
 
     public func directoryExists(atPath path: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+
         guard let item = item(at: path) else {
             return false
         }
@@ -158,6 +168,9 @@ class RamDiskFileManager: FileManagerProtocol {
     }
 
     public func fileExists(atPath path: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+
         guard let item = item(at: path) else {
             return false
         }
@@ -177,6 +190,9 @@ class RamDiskFileManager: FileManagerProtocol {
     }
 
     public func _copyItem(at: URL, to: URL) throws {
+        lock.lock()
+        defer { lock.unlock() }
+
         let fromPath = try urlToPath(at)
         let toPath = try urlToPath(to)
 
@@ -197,6 +213,9 @@ class RamDiskFileManager: FileManagerProtocol {
     }
 
     public func moveItem(at: URL, to: URL) throws {
+        lock.lock()
+        defer { lock.unlock() }
+
         let fromPath = try urlToPath(at)
         let toPath = try urlToPath(to)
 
@@ -230,6 +249,9 @@ class RamDiskFileManager: FileManagerProtocol {
         withIntermediateDirectories: Bool,
         attributes: [FileAttributeKey: Any]?
     ) throws {
+        lock.lock()
+        defer { lock.unlock() }
+
         var item = root
         guard var normalizedPath = normalized(path: try urlToPath(at)) else {
             throw RamDiskError.badURL(at)
@@ -271,6 +293,9 @@ class RamDiskFileManager: FileManagerProtocol {
     }
 
     public func removeItem(at: URL) throws {
+        lock.lock()
+        defer { lock.unlock() }
+
         guard let (parent, name) = parentAndName(of: try urlToPath(at)) else {
             throw RamDiskError.fileNotFound(at)
         }
@@ -287,6 +312,9 @@ class RamDiskFileManager: FileManagerProtocol {
     }
 
     public func contentsOfDirectory(atPath path: String) throws -> [String] {
+        lock.lock()
+        defer { lock.unlock() }
+
         guard let item = item(at: path) else {
             throw RamDiskError.fileNotFound(pathToURL(path))
         }
@@ -302,6 +330,9 @@ class RamDiskFileManager: FileManagerProtocol {
         includingPropertiesForKeys keys: [URLResourceKey]?,
         options: FileManager.DirectoryEnumerationOptions
     ) throws -> [URL] {
+        lock.lock()
+        defer { lock.unlock() }
+
         guard let item = item(at: try urlToPath(url)) else {
             throw RamDiskError.fileNotFound(url)
         }
@@ -328,6 +359,9 @@ class RamDiskFileManager: FileManagerProtocol {
     }
 
     public func contents(of url: URL) throws -> Data {
+        lock.lock()
+        defer { lock.unlock() }
+
         guard let item = item(at: try urlToPath(url)) else {
             throw RamDiskError.fileNotFound(url)
         }
@@ -344,6 +378,9 @@ class RamDiskFileManager: FileManagerProtocol {
         contents data: Data,
         options: NSData.WritingOptions?
     ) throws {
+        lock.lock()
+        defer { lock.unlock() }
+
         guard let (parent, name) = parentAndName(of: try urlToPath(url)) else {
             throw RamDiskError.fileNotFound(url)
         }
@@ -364,6 +401,9 @@ class RamDiskFileManager: FileManagerProtocol {
         at url: URL,
         options: FileManager.DirectoryEnumerationOptions
     ) throws -> (files: [URL], directories: [URL]) {
+        lock.lock()
+        defer { lock.unlock() }
+
         guard let item = item(at: try urlToPath(url)) else {
             throw RamDiskError.fileNotFound(url)
         }
@@ -384,5 +424,45 @@ class RamDiskFileManager: FileManagerProtocol {
         }
 
         return (files: files, directories: directories)
+    }
+
+    public func sizeOfDirectory(
+        at url: URL,
+        options: FileManager.DirectoryEnumerationOptions
+    ) throws -> Int64 {
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard let item = item(at: try urlToPath(url)) else {
+            throw RamDiskError.fileNotFound(url)
+        }
+
+        return try sizeOfDirectory(item: item, at: url, options: options)
+    }
+
+    private func sizeOfDirectory(
+        item: Item,
+        at url: URL,
+        options: FileManager.DirectoryEnumerationOptions
+    ) throws -> Int64 {
+        guard case .directory(let contents) = item.kind else {
+            throw RamDiskError.notADirectory(url)
+        }
+
+        var total: Int64 = 0
+
+        for (name, item) in contents {
+            switch item.kind {
+            case let .file(data):
+                total += Int64(data.count)
+            case .directory:
+                let childURL = url.appending(component: name,
+                                             directoryHint: .isDirectory)
+                total += try sizeOfDirectory(item: item, at: childURL,
+                                             options: options)
+            }
+        }
+
+        return total
     }
 }

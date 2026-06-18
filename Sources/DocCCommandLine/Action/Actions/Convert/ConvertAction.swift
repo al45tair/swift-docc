@@ -43,6 +43,8 @@ public struct ConvertAction: AsyncAction {
     let sourceRepository: SourceRepository?
     
     private var fileManager: any FileManagerProtocol
+    private var outputFileManager: any FileManagerProtocol
+
     private let temporaryDirectory: URL
     
     private let diagnosticWriterOptions: (formatting: DiagnosticFormattingOptions, baseURL: URL)
@@ -94,6 +96,7 @@ public struct ConvertAction: AsyncAction {
         fileManager: any FileManagerProtocol = FileManager.default,
         temporaryDirectory: URL,
         outputFormat: Docc.Convert.OutputFormat = .json,
+        outputFileManager: (any FileManagerProtocol)? = nil,
         documentationCoverageOptions: DocumentationCoverageOptions = .noCoverage,
         bundleDiscoveryOptions: BundleDiscoveryOptions = .init(),
         diagnosticLevel: String? = nil,
@@ -121,6 +124,7 @@ public struct ConvertAction: AsyncAction {
         self.outputFormat = outputFormat
         self.buildLMDBIndex = buildIndex
         self.fileManager = fileManager
+        self.outputFileManager = outputFileManager ?? fileManager
         self.temporaryDirectory = temporaryDirectory
         self.documentationCoverageOptions = documentationCoverageOptions
         self.transformForStaticHosting = transformForStaticHosting
@@ -229,22 +233,32 @@ public struct ConvertAction: AsyncAction {
         let temporaryFolder: URL
         switch outputFormat {
         case .json:
-            temporaryFolder = try createTempFolder(with: htmlTemplateDirectory)
+            temporaryFolder = try Self.createUniqueDirectory(
+                inside: temporaryDirectory,
+                template: htmlTemplateDirectory,
+                fileManager: outputFileManager
+            )
         case .experimentalHTML:
-            temporaryFolder = try createTempFolder(with: nil)
+            temporaryFolder = try Self.createUniqueDirectory(
+                inside: temporaryDirectory,
+                template: nil,
+                fileManager: outputFileManager
+            )
             for file in DocCHTML.StaticResources.allFiles {
-                try fileManager.createFile(at: temporaryFolder.appendingPathComponent(file.filename), contents: file.data)
+                try outputFileManager.createFile(at: temporaryFolder.appendingPathComponent(file.filename), contents: file.data)
             }
+        case .archive:
+            fatalError("FIXME: NOT YET IMPLEMENTED")
         }
         
         do {
             let result = try await _perform(logHandle: &logHandle, temporaryFolder: temporaryFolder)
             diagnosticEngine.flush()
-            try? fileManager.removeItem(at: temporaryFolder)
+            try? outputFileManager.removeItem(at: temporaryFolder)
             return result
         } catch {
             diagnosticEngine.flush()
-            try? fileManager.removeItem(at: temporaryFolder)
+            try? outputFileManager.removeItem(at: temporaryFolder)
             throw error
         }
     }
@@ -283,7 +297,7 @@ public struct ConvertAction: AsyncAction {
         // FIXME: Use `defer` here again when the miscompilation of this asynchronous defer-statement (rdar://137774949) is fixed.
 //        let temporaryFolder = try createTempFolder(with: htmlTemplateDirectory)
 //        defer {
-//            try? fileManager.removeItem(at: temporaryFolder)
+//            try? outputFileManager.removeItem(at: temporaryFolder)
 //        }
 
         let indexHTML: URL?
@@ -304,7 +318,7 @@ public struct ConvertAction: AsyncAction {
                 
                 // A hosting base path was provided which means we need to replace the standard
                 // 'index.html' file with the transformed one.
-                try fileManager.createFile(at: indexHTMLUrl, contents: data)
+                try outputFileManager.createFile(at: indexHTMLUrl, contents: data)
             }
             
             let indexHTMLTemplateURL = temporaryFolder.appendingPathComponent(
@@ -315,7 +329,7 @@ public struct ConvertAction: AsyncAction {
             // Delete any existing 'index-template.html' file that
             // was copied into the temporary output directory with the
             // HTML template.
-            try? fileManager.removeItem(at: indexHTMLTemplateURL)
+            try? outputFileManager.removeItem(at: indexHTMLTemplateURL)
         } else {
             indexHTML = nil
         }
@@ -323,7 +337,7 @@ public struct ConvertAction: AsyncAction {
         let coverageAction = CoverageAction(
             documentationCoverageOptions: documentationCoverageOptions,
             workingDirectory: temporaryFolder,
-            fileManager: fileManager)
+            fileManager: outputFileManager)
 
         let indexer = _completelySkipBuildingIndex ? nil : try Indexer(outputURL: temporaryFolder, bundleID: inputs.id)
 
@@ -335,6 +349,7 @@ public struct ConvertAction: AsyncAction {
             targetFolder: temporaryFolder,
             bundleRootFolder: rootURL,
             fileManager: fileManager,
+            outputFileManager: outputFileManager,
             context: context,
             indexer: indexer,
             enableCustomTemplates: experimentalEnableCustomTemplates,
@@ -348,6 +363,7 @@ public struct ConvertAction: AsyncAction {
             htmlConsumer = try FullPageHTMLContentConsumer(
                 targetFolder: temporaryFolder,
                 fileManager: fileManager,
+                outputFileManager: outputFileManager,
                 customHeader: experimentalEnableCustomTemplates ? inputs.customHeader : nil,
                 customFooter: experimentalEnableCustomTemplates ? inputs.customFooter : nil
             )
@@ -355,6 +371,7 @@ public struct ConvertAction: AsyncAction {
             htmlConsumer = try FileWritingHTMLContentConsumer(
                 targetFolder: temporaryFolder,
                 fileManager: fileManager,
+                outputFileManager: outputFileManager,
                 htmlTemplate: indexHTML,
                 customHeader: experimentalEnableCustomTemplates ? inputs.customHeader : nil,
                 customFooter: experimentalEnableCustomTemplates ? inputs.customFooter : nil
@@ -368,8 +385,8 @@ public struct ConvertAction: AsyncAction {
             let curation = try writer.generateDefaultCurationContents()
             for (url, updatedContent) in curation {
                 guard let data = updatedContent.data(using: .utf8) else { continue }
-                try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: nil)
-                try? data.write(to: url, options: .atomic)
+                try? outputFileManager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: nil)
+                try? outputFileManager.createFile(at: url, contents: data, options: .atomic)
             }
         }
         
@@ -453,17 +470,25 @@ public struct ConvertAction: AsyncAction {
         // However, if the `emitDigest` flag is true, we should replace the current output with our digest of diagnostics.
         // FIXME: We no longer output a diagnostics file in the output. We can remove the `emitDigest` check below.
         if !didEncounterError || emitDigest {
-            try moveOutput(from: temporaryFolder, to: targetDirectory)
+        try signposter.withIntervalSignpost("Move output") {
+            try Self.moveOutput(from: temporaryFolder, to: targetDirectory, fileManager: outputFileManager)
+        }
         }
 
         // Log the output size.
-        benchmark(add: Benchmark.ArchiveOutputSize(archiveDirectory: targetDirectory))
+        benchmark(
+            add: Benchmark.ArchiveOutputSize(
+                archiveDirectory: targetDirectory,
+                fileManager: outputFileManager
+            )
+        )
         benchmark(
             add: Benchmark.DataDirectoryOutputSize(
                 dataDirectory: targetDirectory.appendingPathComponent(
                     NodeURLGenerator.Path.dataFolderName,
                     isDirectory: true
-                )
+                ),
+                fileManager: outputFileManager
             )
         )
         benchmark(
@@ -471,7 +496,8 @@ public struct ConvertAction: AsyncAction {
                 indexDirectory: targetDirectory.appendingPathComponent(
                     NodeURLGenerator.Path.indexFolderName,
                     isDirectory: true
-                )
+                ),
+                fileManager: outputFileManager
             )
         )
         
@@ -482,6 +508,7 @@ public struct ConvertAction: AsyncAction {
                 targetFolder: targetDirectory,
                 bundleRootFolder: rootURL,
                 fileManager: fileManager,
+                outputFileManager: outputFileManager,
                 context: context,
                 indexer: nil,
                 transformForStaticHostingIndexHTML: nil,
@@ -496,11 +523,5 @@ public struct ConvertAction: AsyncAction {
     
     func createTempFolder(with templateURL: URL?) throws -> URL {
         return try Self.createUniqueDirectory(inside: temporaryDirectory, template: templateURL, fileManager: fileManager)
-    }
-    
-    func moveOutput(from: URL, to: URL) throws {
-        try signposter.withIntervalSignpost("Move output") {
-            try Self.moveOutput(from: from, to: to, fileManager: fileManager)
-        }
     }
 }
