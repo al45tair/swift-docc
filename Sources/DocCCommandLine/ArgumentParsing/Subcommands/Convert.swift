@@ -624,7 +624,9 @@ extension Docc {
             case json
             /// Output each page as a static HTML file.
             case experimentalHTML
-            
+            /// Output a zip file containing JSON files
+            case archive
+
             package init?(argument: String) {
                 switch argument {
                     case "json": self = .json
@@ -635,12 +637,14 @@ extension Docc {
                     case "experimental-html-for-development":
                         self = .experimentalHTML
                     
+                    case "archive": self = .archive
+
                     default: return nil
                 }
             }
             
             package static var allValueStrings: [String] {
-                ["json", "experimental-html-for-development"]
+                ["json", "experimental-html-for-development", "archive"]
             }
         }
     }

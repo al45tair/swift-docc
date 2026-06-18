@@ -478,7 +478,8 @@ target_link_libraries(SwiftDocC PUBLIC
   SwiftMarkdown::Markdown
   DocC::SymbolKit
   LMDB::CLMDB
-  Crypto)
+  Crypto
+  ZLIB::ZLIB)
 # FIXME(compnerd) workaround leaking dependencies
 target_link_libraries(SwiftDocC PUBLIC
   libcmark-gfm
