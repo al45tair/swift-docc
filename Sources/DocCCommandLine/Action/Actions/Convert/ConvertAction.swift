@@ -24,7 +24,7 @@ public struct ConvertAction: AsyncAction {
     private let signposter = ConvertActionConverter.signposter
     
     let rootURL: URL?
-    let targetDirectory: URL
+    let targetURL: URL
     let htmlTemplateDirectory: URL?
     
     private let emitDigest: Bool
@@ -55,7 +55,7 @@ public struct ConvertAction: AsyncAction {
     ///   - documentationBundleURL: The root of the documentation catalog to convert.
     ///   - outOfProcessResolver: An out-of-process resolver that
     ///   - analyze: `true` if the convert action should override the provided `diagnosticLevel` with `.information`, otherwise `false`.
-    ///   - targetDirectory: The location where the convert action will write the built documentation output.
+    ///   - targetURL: The location where the convert action will write the built documentation output.
     ///   - htmlTemplateDirectory: The location of the HTML template to use as a base for the built documentation output.
     ///   - emitDigest: Whether the conversion should create metadata files, such as linkable entities information.
     ///   - currentPlatforms: The current version and beta information for platforms that may be encountered while processing symbol graph files.
@@ -88,7 +88,7 @@ public struct ConvertAction: AsyncAction {
         documentationBundleURL: URL?,
         outOfProcessResolver: OutOfProcessReferenceResolver?,
         analyze: Bool,
-        targetDirectory: URL,
+        targetURL: URL,
         htmlTemplateDirectory: URL?,
         emitDigest: Bool,
         currentPlatforms: [String : PlatformVersion]?,
@@ -118,7 +118,7 @@ public struct ConvertAction: AsyncAction {
         dependencies: [URL] = []
     ) throws {
         self.rootURL = documentationBundleURL
-        self.targetDirectory = targetDirectory
+        self.targetURL = targetURL
         self.htmlTemplateDirectory = htmlTemplateDirectory
         self.emitDigest = emitDigest
         self.outputFormat = outputFormat
@@ -512,11 +512,11 @@ public struct ConvertAction: AsyncAction {
 
                     try zipWriter.close()
 
-                    try outputFileManager.createFile(at: targetDirectory, contents: sink.data)
+                    try outputFileManager.createFile(at: targetURL, contents: sink.data)
                 }
             } else {
                 try signposter.withIntervalSignpost("Move output") {
-                    try Self.moveOutput(from: generateInFolder, to: targetDirectory, fileManager: generateInFileManager)
+                    try Self.moveOutput(from: generateInFolder, to: targetURL, fileManager: generateInFileManager)
                 }
             }
         }
@@ -527,13 +527,13 @@ public struct ConvertAction: AsyncAction {
         // Log the output size.
         benchmark(
             add: Benchmark.ArchiveOutputSize(
-                archiveDirectory: targetDirectory,
+                archiveDirectory: targetURL,
                 fileManager: generateInFileManager
             )
         )
         benchmark(
             add: Benchmark.DataDirectoryOutputSize(
-                dataDirectory: targetDirectory.appendingPathComponent(
+                dataDirectory: targetURL.appendingPathComponent(
                     NodeURLGenerator.Path.dataFolderName,
                     isDirectory: true
                 ),
@@ -542,7 +542,7 @@ public struct ConvertAction: AsyncAction {
         )
         benchmark(
             add: Benchmark.IndexDirectoryOutputSize(
-                indexDirectory: targetDirectory.appendingPathComponent(
+                indexDirectory: targetURL.appendingPathComponent(
                     NodeURLGenerator.Path.indexFolderName,
                     isDirectory: true
                 ),
@@ -555,9 +555,9 @@ public struct ConvertAction: AsyncAction {
             let targetFolder: URL
             if outputFormat == .archive {
                 // or alongside it if the output format is set to archive
-                targetFolder = targetDirectory.deletingLastPathComponent()
+                targetFolder = targetURL.deletingLastPathComponent()
             } else {
-                targetFolder = targetDirectory
+                targetFolder = targetURL
             }
 
             let outputConsumer = ConvertFileWritingConsumer(
@@ -574,7 +574,7 @@ public struct ConvertAction: AsyncAction {
             try outputConsumer.consume(benchmarks: Benchmark.main)
         }
 
-        return (ActionResult(didEncounterError: didEncounterError, outputs: [targetDirectory]), context)
+        return (ActionResult(didEncounterError: didEncounterError, outputs: [targetURL]), context)
     }
     
     func createTempFolder(with templateURL: URL?) throws -> URL {

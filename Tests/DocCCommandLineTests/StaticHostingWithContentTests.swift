@@ -68,7 +68,7 @@ class StaticHostingWithContentTests: XCTestCase {
                 documentationBundleURL: URL(fileURLWithPath: "/path/to/\(catalog.name)"),
                 outOfProcessResolver: nil,
                 analyze: false,
-                targetDirectory: URL(fileURLWithPath: "/output-dir"),
+                targetURL: URL(fileURLWithPath: "/output-dir"),
                 htmlTemplateDirectory: URL(fileURLWithPath: "/template"),
                 emitDigest: false,
                 currentPlatforms: nil,
