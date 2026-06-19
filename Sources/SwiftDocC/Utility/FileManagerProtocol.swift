@@ -123,10 +123,12 @@ extension FileManagerProtocol {
 
     public func copyItem(at source: URL, to destination: URL, on otherFileManager: any FileManagerProtocol) throws {
         if directoryExists(atPath: source.path) {
-            if otherFileManager.directoryExists(atPath: destination.path) {
-                try otherFileManager.removeItem(at: destination)
+            if destination.path != "/" {
+                if otherFileManager.directoryExists(atPath: destination.path) {
+                    try otherFileManager.removeItem(at: destination)
+                }
+                try otherFileManager.createDirectory(at: destination, withIntermediateDirectories: false, attributes: [:])
             }
-            try otherFileManager.createDirectory(at: destination, withIntermediateDirectories: false, attributes: [:])
             for item in try contentsOfDirectory(at: source, includingPropertiesForKeys: [], options: []) {
                 if let relativeItem = item.relative(to: source) {
                     let destinationItem = destination.appendingPathComponent(relativeItem.path)

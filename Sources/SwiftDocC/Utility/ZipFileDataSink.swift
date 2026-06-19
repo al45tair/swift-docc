@@ -14,7 +14,7 @@ public enum ZipFileDataSinkError: Error {
   case badOffset
 }
 
-public struct ZipFileDataSink: ZipFileSink {
+public class ZipFileDataSink: ZipFileSink {
   public var data: Data
 
   public var canSeek: Bool { true }
@@ -30,17 +30,18 @@ public struct ZipFileDataSink: ZipFileSink {
     return pos
   }
 
-  public mutating func seek(_ pos: Int) throws {
+  public func seek(_ pos: Int) throws {
     if pos < 0 || pos > data.count {
       throw ZipFileDataSinkError.badOffset
     }
     self.pos = pos
   }
 
-  public mutating func write(_ bytes: RawSpan) throws {
+  public func write(_ bytes: RawSpan) throws {
     let rangeToReplace = pos..<min(pos + bytes.byteCount, data.count)
     bytes.withUnsafeBytes { buffer in
       data.replaceSubrange(rangeToReplace, with: buffer)
     }
+    pos += bytes.byteCount
   }
 }

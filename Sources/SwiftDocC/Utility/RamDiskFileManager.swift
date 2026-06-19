@@ -271,6 +271,7 @@ public class RamDiskFileManager: FileManagerProtocol {
                         kind: .directory([:]))
                     contents[piece] = newItem
                     item.kind = .directory(contents)
+                    item = newItem
                 } else {
                     throw RamDiskError.fileNotFound(at)
                 }
@@ -281,8 +282,13 @@ public class RamDiskFileManager: FileManagerProtocol {
         }
         switch item.kind {
         case .directory(var contents):
-            if contents[name] != nil {
-                throw RamDiskError.fileAlreadyExists(at)
+            if let child = contents[name] {
+                switch child.kind {
+                case .file:
+                    throw RamDiskError.fileAlreadyExists(at)
+                case .directory:
+                    break
+                }
             } else {
                 let newItem = Item(
                     attributes: attributes ?? [:],
@@ -343,7 +349,8 @@ public class RamDiskFileManager: FileManagerProtocol {
             throw RamDiskError.notADirectory(url)
         }
 
-        return contents.keys.map { URL(string: $0, relativeTo: url)! }
+        return contents.keys.map { url.appending(component: $0,
+                                    directoryHint: .notDirectory) }
     }
 
     public func uniqueTemporaryDirectory() -> URL {
@@ -395,6 +402,7 @@ public class RamDiskFileManager: FileManagerProtocol {
                 }
             }
             contents[name] = Item(attributes: [:], kind: .file(data))
+            parent.kind = .directory(contents)
         case .file:
             throw RamDiskError.fileAlreadyExists(url)
         }
@@ -420,9 +428,11 @@ public class RamDiskFileManager: FileManagerProtocol {
         for (name, item) in contents {
             switch item.kind {
             case .file:
-                files.append(URL(string: name, relativeTo: url)!)
+                files.append(url.appending(component: name,
+                    directoryHint: .notDirectory))
             case .directory:
-                directories.append(URL(string: name, relativeTo: url)!)
+                directories.append(url.appending(component: name,
+                    directoryHint: .isDirectory))
             }
         }
 

@@ -272,7 +272,7 @@ public struct ConvertAction: AsyncAction {
         let generateInFolder: URL
         let generateInFileManager: any FileManagerProtocol
         if outputFormat == .archive {
-            generateInFolder = URL(string: "/")!
+            generateInFolder = URL(filePath: "/")!
             generateInFileManager = RamDiskFileManager()
 
             if let htmlTemplateDirectory {
@@ -357,7 +357,7 @@ public struct ConvertAction: AsyncAction {
             workingDirectory: generateInFolder,
             fileManager: generateInFileManager)
 
-        let indexer = try Indexer(outputURL: generateInFolder, fileManager: outputFileManager, bundleID: inputs.id)
+        let indexer = try Indexer(outputURL: generateInFolder, fileManager: generateInFileManager, bundleID: inputs.id)
 
         let registerInterval = signposter.beginInterval("Register", id: signposter.makeSignpostID())
         let context = try await DocumentationContext(bundle: inputs, dataProvider: dataProvider, diagnosticEngine: diagnosticEngine, configuration: configuration)

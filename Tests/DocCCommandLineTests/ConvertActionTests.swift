@@ -2908,6 +2908,44 @@ class ConvertActionTests: XCTestCase {
         ])
     }
     
+    func testCreatesCompressedArchive() async throws {
+        let catalog = Folder(name: "unit-test.docc", content: [
+            TextFile(name: "Something.md", utf8Content: """
+            # Something
+            
+            This article links to some assets
+            
+            ![Some alt text](image-name)
+            """),
+            
+            // Image variants
+            DataFile(name: "image-name.png", data: Data()),
+            DataFile(name: "image-name~dark.png", data: Data()),
+            DataFile(name: "image-name@2x.png", data: Data()),
+            DataFile(name: "image-name~dark@2x.png", data: Data()),
+        ])
+    
+        let fileSystem = try TestFileSystem(folders: [Folder.emptyHTMLTemplateDirectory, catalog])
+        let targetURL = URL(fileURLWithPath: "/Output.doccarchive")
+
+        let action = try ConvertAction(
+            documentationBundleURL: catalog.absoluteURL,
+            outOfProcessResolver: nil,
+            analyze: false,
+            targetURL: targetURL,
+            htmlTemplateDirectory: Folder.emptyHTMLTemplateDirectory.absoluteURL,
+            emitDigest: false,
+            currentPlatforms: nil,
+            fileManager: fileSystem,
+            temporaryDirectory: fileSystem.uniqueTemporaryDirectory(),
+            outputFormat: .archive
+        )
+        
+        let result = try await action.perform(logHandle: .none)
+        XCTAssertEqual(result.outputs, [targetURL])
+
+        XCTAssert(fileSystem.fileExists(atPath: targetURL.path))
+    }
     #endif
 }
 

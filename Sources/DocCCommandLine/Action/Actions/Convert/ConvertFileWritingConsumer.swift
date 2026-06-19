@@ -47,6 +47,7 @@ struct ConvertFileWritingConsumer: ConvertOutputConsumer, ExternalNodeConsumer, 
         self.renderNodeWriter = JSONEncodingRenderNodeWriter(
             targetFolder: targetFolder,
             fileManager: fileManager,
+            outputFileManager: outputFileManager,
             transformForStaticHostingIndexHTML: transformForStaticHostingIndexHTML
         )
         self.indexer = indexer

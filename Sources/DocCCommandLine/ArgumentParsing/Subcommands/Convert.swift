@@ -85,7 +85,7 @@ extension Docc {
             }
             
             /// The format that the convert action will output the documentation in when writing to the specific output location.
-            @Option(name: .long, help: .hidden)
+            @Option(name: .long, help: "The output format to use.")
             var outputFormat: OutputFormat = .json
         }
         
@@ -644,7 +644,7 @@ extension Docc {
             }
             
             package static var allValueStrings: [String] {
-                ["json", "experimental-html-for-development", "archive"]
+                ["archive", "json", "experimental-html-for-development"]
             }
         }
     }

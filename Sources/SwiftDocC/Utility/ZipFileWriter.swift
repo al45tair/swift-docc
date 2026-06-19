@@ -22,19 +22,19 @@ public protocol ZipFileSink {
     func tell() throws -> Int?
 
     /// Seek to a location in the stream
-    mutating func seek(_ pos: Int) throws
+    func seek(_ pos: Int) throws
 
     /// Write a fixed-width integer, in little-endian order
-    mutating func write<T: FixedWidthInteger>(_ x: T) throws
+    func write<T: FixedWidthInteger>(_ x: T) throws
 
     /// Write a UTF-8 string
-    mutating func write(_ s: String) throws
+    func write(_ s: String) throws
 
     /// Write bytes
-    mutating func write(_ bytes: RawSpan) throws
+    func write(_ bytes: RawSpan) throws
 
     /// Close (optional)
-    mutating func close() throws
+    func close() throws
 }
 
 /// A ZipFileWriter can be used to generate a .zip file.
@@ -298,21 +298,21 @@ public class ZipFileWriter<S: ZipFileSink> {
 
 // Provide default implementations of Sink methods
 public extension ZipFileSink {
-    mutating func write<T: FixedWidthInteger>(_ x: T) throws {
+    func write<T: FixedWidthInteger>(_ x: T) throws {
         var maybeSwapped = x.littleEndian
         try withUnsafeBytes(of: &maybeSwapped) {
             try self.write($0.bytes)
         }
     }
 
-    mutating func write(_ s: String) throws {
+    func write(_ s: String) throws {
         var sMutable = s
         try sMutable.withUTF8 {
             try self.write(UnsafeRawBufferPointer($0).bytes)
         }
     }
 
-    mutating func close() throws {
+    func close() throws {
         // Dummy implementation
     }
 }
