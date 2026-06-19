@@ -936,7 +936,7 @@ class MergeActionTests: XCTestCase {
             let outputPath = baseOutputDir.appendingPathComponent("\(name).doccarchive", isDirectory: true)
             
             let realTempURL = try createTemporaryDirectory() // The navigator builder only support real file systems
-            let indexer = try ConvertAction.Indexer(outputURL: realTempURL, bundleID: inputs.id)
+            let indexer = try ConvertAction.Indexer(outputURL: realTempURL, fileManager: FileManager.default, bundleID: inputs.id)
             
             let outputConsumer = ConvertFileWritingConsumer(targetFolder: outputPath, bundleRootFolder: catalogDir, fileManager: fileSystem, outputFileManager: fileSystem, context: context, indexer: indexer, transformForStaticHostingIndexHTML: nil, bundleID: inputs.id)
             

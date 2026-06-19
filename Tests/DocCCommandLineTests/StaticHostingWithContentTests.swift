@@ -64,7 +64,7 @@ class StaticHostingWithContentTests: XCTestCase {
         
         for includeHTMLContent in [true, false] {
             
-            var action = try ConvertAction(
+            let action = try ConvertAction(
                 documentationBundleURL: URL(fileURLWithPath: "/path/to/\(catalog.name)"),
                 outOfProcessResolver: nil,
                 analyze: false,
@@ -80,8 +80,6 @@ class StaticHostingWithContentTests: XCTestCase {
                 includeContentInEachHTMLFile: includeHTMLContent,
                 hostingBasePath: basePath
             )
-            // The old `Indexer` type doesn't work with virtual file systems.
-            action._completelySkipBuildingIndex = true
             
             _ = try await action.perform(logHandle: .none)
             
@@ -99,6 +97,8 @@ class StaticHostingWithContentTests: XCTestCase {
             ├─ images/
             │  ╰─ Something/
             ├─ index.html
+            ├─ index/
+            │  ╰─ index.json
             ├─ metadata.json
             ╰─ videos/
                ╰─ Something/

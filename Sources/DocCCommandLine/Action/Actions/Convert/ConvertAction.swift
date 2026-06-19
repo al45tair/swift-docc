@@ -217,11 +217,6 @@ public struct ConvertAction: AsyncAction {
     /// A block of extra work that tests perform to affect the time it takes to convert documentation
     var _extraTestWork: (() async -> Void)?
 
-    /// The `Indexer` type doesn't work with virtual file systems.
-    ///
-    /// Tests that don't verify the contents of the navigator index can set this to `true` so that they can use a virtual, in-memory, file system.
-    var _completelySkipBuildingIndex: Bool = false
-    
     /// Converts each eligible file from the source documentation bundle,
     /// saves the results in the given output alongside the template files.
     public func perform(logHandle: inout LogHandle) async throws -> ActionResult {
@@ -248,11 +243,16 @@ public struct ConvertAction: AsyncAction {
                 try outputFileManager.createFile(at: temporaryFolder.appendingPathComponent(file.filename), contents: file.data)
             }
         case .archive:
-            fatalError("FIXME: NOT YET IMPLEMENTED")
+            temporaryFolder = try Self.createUniqueDirectory(
+                inside: temporaryDirectory,
+                template: nil,
+                fileManager: outputFileManager
+            )
         }
         
         do {
             let result = try await _perform(logHandle: &logHandle, temporaryFolder: temporaryFolder)
+
             diagnosticEngine.flush()
             try? outputFileManager.removeItem(at: temporaryFolder)
             return result
@@ -269,6 +269,24 @@ public struct ConvertAction: AsyncAction {
             signposter.endInterval("Convert", convertSignpostHandle)
         }
         
+        let generateInFolder: URL
+        let generateInFileManager: any FileManagerProtocol
+        if outputFormat == .archive {
+            generateInFolder = URL(string: "/")!
+            generateInFileManager = RamDiskFileManager()
+
+            if let htmlTemplateDirectory {
+                try fileManager.copyItem(
+                    at: htmlTemplateDirectory,
+                    to: generateInFolder,
+                    on: generateInFileManager
+                )
+            }
+        } else {
+            generateInFolder = temporaryFolder
+            generateInFileManager = outputFileManager
+        }
+
         // Add the default diagnostic console writer now that we know what log handle it should write to.
         if !diagnosticEngine.hasConsumer(matching: { $0 is DiagnosticConsoleWriter }) {
             diagnosticEngine.add(
@@ -297,12 +315,12 @@ public struct ConvertAction: AsyncAction {
         // FIXME: Use `defer` here again when the miscompilation of this asynchronous defer-statement (rdar://137774949) is fixed.
 //        let temporaryFolder = try createTempFolder(with: htmlTemplateDirectory)
 //        defer {
-//            try? outputFileManager.removeItem(at: temporaryFolder)
+//            try? generateInFileManager.removeItem(at: temporaryFolder)
 //        }
 
         let indexHTML: URL?
         if let htmlTemplateDirectory, outputFormat == .json {
-            let indexHTMLUrl = temporaryFolder.appendingPathComponent(
+            let indexHTMLUrl = generateInFolder.appendingPathComponent(
                 HTMLTemplate.indexFileName.rawValue,
                 isDirectory: false
             )
@@ -318,10 +336,10 @@ public struct ConvertAction: AsyncAction {
                 
                 // A hosting base path was provided which means we need to replace the standard
                 // 'index.html' file with the transformed one.
-                try outputFileManager.createFile(at: indexHTMLUrl, contents: data)
+                try generateInFileManager.createFile(at: indexHTMLUrl, contents: data)
             }
             
-            let indexHTMLTemplateURL = temporaryFolder.appendingPathComponent(
+            let indexHTMLTemplateURL = generateInFolder.appendingPathComponent(
                 HTMLTemplate.templateFileName.rawValue,
                 isDirectory: false
             )
@@ -329,27 +347,27 @@ public struct ConvertAction: AsyncAction {
             // Delete any existing 'index-template.html' file that
             // was copied into the temporary output directory with the
             // HTML template.
-            try? outputFileManager.removeItem(at: indexHTMLTemplateURL)
+            try? generateInFileManager.removeItem(at: indexHTMLTemplateURL)
         } else {
             indexHTML = nil
         }
         
         let coverageAction = CoverageAction(
             documentationCoverageOptions: documentationCoverageOptions,
-            workingDirectory: temporaryFolder,
-            fileManager: outputFileManager)
+            workingDirectory: generateInFolder,
+            fileManager: generateInFileManager)
 
-        let indexer = _completelySkipBuildingIndex ? nil : try Indexer(outputURL: temporaryFolder, bundleID: inputs.id)
+        let indexer = try Indexer(outputURL: generateInFolder, fileManager: outputFileManager, bundleID: inputs.id)
 
         let registerInterval = signposter.beginInterval("Register", id: signposter.makeSignpostID())
         let context = try await DocumentationContext(bundle: inputs, dataProvider: dataProvider, diagnosticEngine: diagnosticEngine, configuration: configuration)
         signposter.endInterval("Register", registerInterval)
         
         let outputConsumer = ConvertFileWritingConsumer(
-            targetFolder: temporaryFolder,
+            targetFolder: generateInFolder,
             bundleRootFolder: rootURL,
             fileManager: fileManager,
-            outputFileManager: outputFileManager,
+            outputFileManager: generateInFileManager,
             context: context,
             indexer: indexer,
             enableCustomTemplates: experimentalEnableCustomTemplates,
@@ -361,17 +379,17 @@ public struct ConvertAction: AsyncAction {
         let htmlConsumer: (any HTMLContentConsumer)?
         if outputFormat == .experimentalHTML {
             htmlConsumer = try FullPageHTMLContentConsumer(
-                targetFolder: temporaryFolder,
+                targetFolder: generateInFolder,
                 fileManager: fileManager,
-                outputFileManager: outputFileManager,
+                outputFileManager: generateInFileManager,
                 customHeader: experimentalEnableCustomTemplates ? inputs.customHeader : nil,
                 customFooter: experimentalEnableCustomTemplates ? inputs.customFooter : nil
             )
         } else if includeContentInEachHTMLFile, let indexHTML {
             htmlConsumer = try FileWritingHTMLContentConsumer(
-                targetFolder: temporaryFolder,
+                targetFolder: generateInFolder,
                 fileManager: fileManager,
-                outputFileManager: outputFileManager,
+                outputFileManager: generateInFileManager,
                 htmlTemplate: indexHTML,
                 customHeader: experimentalEnableCustomTemplates ? inputs.customHeader : nil,
                 customFooter: experimentalEnableCustomTemplates ? inputs.customFooter : nil
@@ -385,8 +403,8 @@ public struct ConvertAction: AsyncAction {
             let curation = try writer.generateDefaultCurationContents()
             for (url, updatedContent) in curation {
                 guard let data = updatedContent.data(using: .utf8) else { continue }
-                try? outputFileManager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: nil)
-                try? outputFileManager.createFile(at: url, contents: data, options: .atomic)
+                try? generateInFileManager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: nil)
+                try? generateInFileManager.createFile(at: url, contents: data, options: .atomic)
             }
         }
         
@@ -438,27 +456,21 @@ public struct ConvertAction: AsyncAction {
             )
         }
         
-        // If we're building a navigation index, finalize the process and collect encountered diagnostics.
-        if let indexer {
-            let finalizeNavigationIndexMetric = benchmark(begin: Benchmark.Duration(id: "finalize-navigation-index"))
-            
-            // Always emit a JSON representation of the index but only emit the LMDB
-            // index if the user has explicitly opted in with the `--emit-lmdb-index` flag.
-            let indexerProblems = signposter.withIntervalSignpost("Finalize navigator index") {
-                indexer.finalize(emitJSON: true, emitLMDB: buildLMDBIndex)
-            }
-            postConversionDiagnostics.append(contentsOf: indexerProblems)
-            
-            benchmark(end: finalizeNavigationIndexMetric)
+        // Finalize the indexing process and collect encountered diagnostics.
+        let finalizeNavigationIndexMetric = benchmark(begin: Benchmark.Duration(id: "finalize-navigation-index"))
+
+        // Always emit a JSON representation of the index but only emit the LMDB
+        // index if the user has explicitly opted in with the `--emit-lmdb-index` flag.
+        let indexerProblems = signposter.withIntervalSignpost("Finalize navigator index") {
+            indexer.finalize(emitJSON: true, emitLMDB: buildLMDBIndex)
         }
+        postConversionDiagnostics.append(contentsOf: indexerProblems)
+
+        benchmark(end: finalizeNavigationIndexMetric)
         
         // Output the diagnostics encountered during the convert process to the user.
         diagnosticEngine.emit(postConversionDiagnostics)
 
-        // Stop the "total time" metric here. The moveOutput time isn't very interesting to include in the benchmark.
-        // New tasks and computations should be added above this line so that they're included in the benchmark.
-        benchmark(end: totalTimeMetric)
-        
         if !didEncounterError {
             let coverageResults = try await coverageAction.perform(logHandle: &logHandle)
             postConversionDiagnostics.append(contentsOf: coverageResults.diagnostics)
@@ -470,16 +482,53 @@ public struct ConvertAction: AsyncAction {
         // However, if the `emitDigest` flag is true, we should replace the current output with our digest of diagnostics.
         // FIXME: We no longer output a diagnostics file in the output. We can remove the `emitDigest` check below.
         if !didEncounterError || emitDigest {
-        try signposter.withIntervalSignpost("Move output") {
-            try Self.moveOutput(from: temporaryFolder, to: targetDirectory, fileManager: outputFileManager)
+            if outputFormat == .archive {
+                try signposter.withIntervalSignpost("Compress data") {
+                    // In archive mode, we have all of the files now in the ramdisk; generate zip output.
+                    let ramdisk = generateInFileManager as! RamDiskFileManager
+                    let sink = ZipFileDataSink()
+                    let zipWriter = ZipFileWriter(sink: sink)
+                    var urlStack: [URL] = [URL(filePath: "/")]
+                    let now = Date.now
+
+                    while let url = urlStack.popLast() {
+                        let (files, directories) = try ramdisk.contentsOfDirectory(at: url, options: [])
+                        for directory in directories {
+                            try zipWriter.addDirectory(
+                                named: directory.path,
+                                date: now
+                            )
+                            urlStack.append(directory)
+                        }
+                        for file in files {
+                            let data = try ramdisk.contents(of: file)
+                            try zipWriter.withFile(
+                                named: file.path,
+                                date: now) { write in
+                                try write(data.bytes)
+                            }
+                        }
+                    }
+
+                    try zipWriter.close()
+
+                    try outputFileManager.createFile(at: targetDirectory, contents: sink.data)
+                }
+            } else {
+                try signposter.withIntervalSignpost("Move output") {
+                    try Self.moveOutput(from: generateInFolder, to: targetDirectory, fileManager: generateInFileManager)
+                }
+            }
         }
-        }
+
+        // Stop the "total time" metric here. While moveOutput isn't interesting, compression is.
+        benchmark(end: totalTimeMetric)
 
         // Log the output size.
         benchmark(
             add: Benchmark.ArchiveOutputSize(
                 archiveDirectory: targetDirectory,
-                fileManager: outputFileManager
+                fileManager: generateInFileManager
             )
         )
         benchmark(
@@ -488,7 +537,7 @@ public struct ConvertAction: AsyncAction {
                     NodeURLGenerator.Path.dataFolderName,
                     isDirectory: true
                 ),
-                fileManager: outputFileManager
+                fileManager: generateInFileManager
             )
         )
         benchmark(
@@ -497,18 +546,25 @@ public struct ConvertAction: AsyncAction {
                     NodeURLGenerator.Path.indexFolderName,
                     isDirectory: true
                 ),
-                fileManager: outputFileManager
+                fileManager: generateInFileManager
             )
         )
         
         if Benchmark.main.isEnabled {
             // Write the benchmark files directly in the target directory.
+            let targetFolder: URL
+            if outputFormat == .archive {
+                // or alongside it if the output format is set to archive
+                targetFolder = targetDirectory.deletingLastPathComponent()
+            } else {
+                targetFolder = targetDirectory
+            }
 
             let outputConsumer = ConvertFileWritingConsumer(
-                targetFolder: targetDirectory,
+                targetFolder: targetFolder,
                 bundleRootFolder: rootURL,
                 fileManager: fileManager,
-                outputFileManager: outputFileManager,
+                outputFileManager: generateInFileManager,
                 context: context,
                 indexer: nil,
                 transformForStaticHostingIndexHTML: nil,

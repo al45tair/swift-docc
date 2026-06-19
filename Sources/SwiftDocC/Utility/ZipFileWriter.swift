@@ -8,39 +8,39 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-package import Foundation
+public import Foundation
 internal import ZLib
 
-struct ZLibError: Error {
+public struct ZLibError: Error {
     var message: String
 }
 
-protocol ZipFileSink {
+public protocol ZipFileSink {
     var canSeek: Bool { get }
 
     /// Return the current position in the stream, or nil if not seekable
     func tell() throws -> Int?
 
     /// Seek to a location in the stream
-    func seek(_ pos: Int) throws
+    mutating func seek(_ pos: Int) throws
 
     /// Write a fixed-width integer, in little-endian order
-    func write<T: FixedWidthInteger>(_ x: T) throws
+    mutating func write<T: FixedWidthInteger>(_ x: T) throws
 
     /// Write a UTF-8 string
-    func write(_ s: String) throws
+    mutating func write(_ s: String) throws
 
     /// Write bytes
-    func write(_ bytes: RawSpan) throws
+    mutating func write(_ bytes: RawSpan) throws
 
     /// Close (optional)
-    func close() throws
+    mutating func close() throws
 }
 
 /// A ZipFileWriter can be used to generate a .zip file.
 ///
 /// This generates UTF-8 zip files; it does not use Zip64 format.
-class ZipFileWriter<S: ZipFileSink> {
+public class ZipFileWriter<S: ZipFileSink> {
 
     var sink: S
     var comment: String?
@@ -61,7 +61,7 @@ class ZipFileWriter<S: ZipFileSink> {
     private var bytesWritten = 0
     private var buffer: UnsafeMutableRawBufferPointer
 
-    init(sink: consuming S, comment: String? = nil) {
+    public init(sink: consuming S, comment: String? = nil) {
         self.sink = sink
         self.comment = comment
         buffer = UnsafeMutableRawBufferPointer.allocate(
@@ -74,7 +74,15 @@ class ZipFileWriter<S: ZipFileSink> {
         buffer.deallocate()
     }
 
-    func withFile(
+    public func addDirectory(
+        named name: String,
+        date: Date = .now,
+        comment: String? = nil
+    ) throws {
+        try withFile(named: name + "/", date: date, comment: comment) { _ in }
+    }
+
+    public func withFile(
         named name: String,
         date: Date = .now,
         comment: String? = nil,
@@ -210,7 +218,7 @@ class ZipFileWriter<S: ZipFileSink> {
             ))
     }
 
-    func close() throws {
+    public func close() throws {
         // max compression, UTF-8 name, length at end if not seekable
         let flags: UInt16 = sink.canSeek ? 0x802 : 0x80a
         let centralDirectoryOffset = bytesWritten
@@ -289,22 +297,22 @@ class ZipFileWriter<S: ZipFileSink> {
 }
 
 // Provide default implementations of Sink methods
-extension ZipFileSink {
-    func write<T: FixedWidthInteger>(_ x: T) throws {
+public extension ZipFileSink {
+    mutating func write<T: FixedWidthInteger>(_ x: T) throws {
         var maybeSwapped = x.littleEndian
         try withUnsafeBytes(of: &maybeSwapped) {
             try self.write($0.bytes)
         }
     }
 
-    func write(_ s: String) throws {
+    mutating func write(_ s: String) throws {
         var sMutable = s
         try sMutable.withUTF8 {
             try self.write(UnsafeRawBufferPointer($0).bytes)
         }
     }
 
-    func close() throws {
+    mutating func close() throws {
         // Dummy implementation
     }
 }

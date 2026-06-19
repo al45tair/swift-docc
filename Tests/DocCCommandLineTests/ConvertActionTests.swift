@@ -2851,7 +2851,7 @@ class ConvertActionTests: XCTestCase {
             DataFile(name: "image-name~dark@2x.png", data: Data()),
         ])
     
-        let fileSystem = try TestFileSystem(folders: [catalog])
+        let fileSystem = try TestFileSystem(folders: [Folder.emptyHTMLTemplateDirectory, catalog])
         let targetURL = URL(fileURLWithPath: "/Output.doccarchive")
         
         let action = try ConvertAction(
@@ -2882,6 +2882,9 @@ class ConvertActionTests: XCTestCase {
         │     ├─ image-name@2x.png
         │     ├─ image-name~dark.png
         │     ╰─ image-name~dark@2x.png
+        ├─ index.html
+        ├─ index/
+        │  ╰─ index.json
         ├─ metadata.json
         ╰─ videos/
            ╰─ unit-test/

@@ -8,7 +8,7 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-package import Foundation
+public import Foundation
 
 enum RamDiskError: Error {
     case badURL(URL)
@@ -20,7 +20,7 @@ enum RamDiskError: Error {
 }
 
 /// A simple FileManagerProtocol implementation that holds data in memory.
-class RamDiskFileManager: FileManagerProtocol {
+public class RamDiskFileManager: FileManagerProtocol {
     class Item {
         enum Kind {
             case directory([String: Item])
@@ -53,6 +53,9 @@ class RamDiskFileManager: FileManagerProtocol {
     var root = Item(attributes: [:], kind: .directory([:]))
     var cwd: String = "/"
     var lock = NSLock()
+
+    public init() {
+    }
 
     func normalized(path: String) -> [String]? {
         var normalized: [String] = []
