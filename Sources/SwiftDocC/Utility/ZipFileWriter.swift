@@ -138,6 +138,9 @@ public class ZipFileWriter<S: ZipFileSink> {
         }
 
         try generate { (data: RawSpan) throws -> Void in
+            if data.byteCount == 0 {
+                return
+            }
             try data.withUnsafeBytes { inbuf in
                 // Update CRC
                 crc = crc32_z(crc, inbuf.baseAddress, inbuf.count)

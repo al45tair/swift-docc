@@ -2945,6 +2945,19 @@ class ConvertActionTests: XCTestCase {
         XCTAssertEqual(result.outputs, [targetURL])
 
         XCTAssert(fileSystem.fileExists(atPath: targetURL.path))
+
+        let zippedData = try fileSystem.contents(of: targetURL)
+        let zipSource = ZipFileDataSource(data: zippedData)
+        let zipReader = try ZipFileReader(source: zipSource)
+
+        XCTAssert(zipReader.fileExists(atPath:"/data/documentation/something.json"))
+        XCTAssert(zipReader.fileExists(atPath:"/images/unit-test/image-name.png"))
+        XCTAssert(zipReader.fileExists(atPath:"/images/unit-test/image-name@2x.png"))
+        XCTAssert(zipReader.fileExists(atPath:"/images/unit-test/image-name~dark.png"))
+        XCTAssert(zipReader.fileExists(atPath:"/images/unit-test/image-name~dark@2x.png"))
+        XCTAssert(zipReader.fileExists(atPath:"/index.html"))
+        XCTAssert(zipReader.fileExists(atPath:"/index/index.json"))
+        XCTAssert(zipReader.fileExists(atPath:"/metadata.json"))
     }
     #endif
 }
