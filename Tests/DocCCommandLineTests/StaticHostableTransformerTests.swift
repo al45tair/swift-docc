@@ -187,7 +187,7 @@ class StaticHostableTransformerTests: StaticHostingBaseTests {
                 continue
             }
             let indexFileURL = folder.appendingPathComponent("index.html")
-            let testHTMLString = try String(contentsOf: indexFileURL)
+            let testHTMLString = try String(contentsOf: indexFileURL, encoding: .utf8)
             XCTAssertEqual(testHTMLString, indexHTML, "Unexpected content in index.html at \(indexFileURL)")
         }
     }
