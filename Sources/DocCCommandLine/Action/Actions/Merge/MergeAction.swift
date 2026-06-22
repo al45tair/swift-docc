@@ -18,8 +18,9 @@ struct MergeAction: AsyncAction {
     var archives: [URL]
     var landingPageInfo: LandingPageInfo
     var outputURL: URL
+    var outputFormat: Docc.Merge.OutputFormat
     var fileManager: any FileManagerProtocol
-    
+
     /// Information about how the merge action should create landing page content for the combined archive
     enum LandingPageInfo {
         // This enum will have a case for a landing page catalog when we add support for that.
@@ -33,6 +34,26 @@ struct MergeAction: AsyncAction {
             var style: TopicsVisualStyle.Style
         }
     }
+
+    private func rootAndManager(for archive: URL) throws -> (root: URL, fileManager: any ReadOnlyFileManagerProtocol) {
+        let archiveFileManager: any ReadOnlyFileManagerProtocol
+        let archiveRoot: URL
+        if fileManager.directoryExists(atPath: archive.path) {
+            archiveFileManager = fileManager
+            archiveRoot = archive
+        } else {
+            let zipped = try fileManager.contents(of: archive)
+
+            // TODO: We could add ZipFileFileSource rather than reading it all at once
+            let source = ZipFileDataSource(data: zipped)
+            let reader = try ZipFileReader(source: source)
+
+            archiveFileManager = reader
+            archiveRoot = URL(filePath:"/")
+        }
+
+        return (root: archiveRoot, fileManager: archiveFileManager)
+    }
     
     func perform(logHandle: inout LogHandle) async throws -> ActionResult {
         guard let firstArchive = archives.first else {
@@ -44,39 +65,72 @@ struct MergeAction: AsyncAction {
         try validateThatArchivesHaveDisjointData()
         let supportsStaticHosting = try validateThatAllArchivesOrNoArchivesSupportStaticHosting()
         
-        let targetURL = try Self.createUniqueDirectory(inside: fileManager.uniqueTemporaryDirectory(), template: firstArchive, fileManager: fileManager)
+        let generateInFileManager: any FileManagerProtocol
+        let temporaryFolder: URL?
+        let targetURL: URL
+        switch outputFormat {
+            case .json:
+                targetURL = try Self.createUniqueDirectory(inside: fileManager.uniqueTemporaryDirectory(), template: nil, fileManager: fileManager)
+                generateInFileManager = fileManager
+                temporaryFolder = targetURL
+            case .archive:
+                temporaryFolder = nil
+                generateInFileManager = RamDiskFileManager()
+                targetURL = URL(filePath: "/")
+        }
+
         defer {
-            try? fileManager.removeItem(at: targetURL)
+            if let temporaryFolder {
+                try? fileManager.removeItem(at: temporaryFolder)
+            }
         }
       
+        // Populate the root with the contents of the first archive
+        if fileManager.directoryExists(atPath: firstArchive.path) {
+            // This is a JSON directory
+            try fileManager.copyItem(at: firstArchive, to: targetURL, on: generateInFileManager)
+        } else {
+            // This is a zipped archive
+            let zipped = try fileManager.contents(of: firstArchive)
+
+            // TODO: We could add ZipFileFileSource rather than reading it all at once
+            let source = ZipFileDataSource(data: zipped)
+            let reader = try ZipFileReader(source: source)
+
+            try reader.copyItem(at: URL(filePath:"/"), to: targetURL, on: generateInFileManager)
+        }
+
         // TODO: Merge the LMDB navigator index
         
         let jsonIndexURL = targetURL.appendingPathComponent("index/index.json")
-        guard let jsonIndexData = fileManager.contents(atPath: jsonIndexURL.path) else {
+        guard let jsonIndexData = generateInFileManager.contents(atPath: jsonIndexURL.path) else {
             throw CocoaError.error(.fileReadNoSuchFile, userInfo: [NSFilePathErrorKey: jsonIndexURL.path])
         }
         var combinedJSONIndex = try JSONDecoder().decode(RenderIndex.self, from: jsonIndexData)
         
         // Ensure that the destination has a data directory in case the first archive didn't have any pages.
-        try? fileManager.createDirectory(at: targetURL.appendingPathComponent("data", isDirectory: true), withIntermediateDirectories: false, attributes: nil)
+        try? generateInFileManager.createDirectory(at: targetURL.appendingPathComponent("data", isDirectory: true), withIntermediateDirectories: false, attributes: nil)
         
         let directoriesToCopy = ["data/documentation", "data/tutorials", "images", "videos", "downloads"] + (supportsStaticHosting ? ["documentation", "tutorials"] : [])
         for archive in archives.dropFirst() {
+            let (archiveRoot, archiveFileManager) = try rootAndManager(for: archive)
             for directoryToCopy in directoriesToCopy {
-                let fromDirectory = archive.appendingPathComponent(directoryToCopy, isDirectory: true)
+                let fromDirectory = archiveRoot.appendingPathComponent(directoryToCopy, isDirectory: true)
                 let toDirectory = targetURL.appendingPathComponent(directoryToCopy, isDirectory: true)
 
-                guard fileManager.directoryExists(atPath: fromDirectory.path) else { continue }
+                guard archiveFileManager.directoryExists(atPath: fromDirectory.path) else { continue }
 
                 // Ensure that the destination directory exist in case the first archive didn't have that kind of pages.
                 // This is necessary when merging a reference-only archive with a tutorial-only archive.
-                try? fileManager.createDirectory(at: toDirectory, withIntermediateDirectories: false, attributes: nil)
-                for from in (try? fileManager.contentsOfDirectory(at: fromDirectory, includingPropertiesForKeys: nil, options: .skipsHiddenFiles)) ?? [] {
+                try? generateInFileManager.createDirectory(at: toDirectory, withIntermediateDirectories: false, attributes: nil)
+                for from in (try? archiveFileManager.contentsOfDirectory(at: fromDirectory, includingPropertiesForKeys: nil, options: .skipsHiddenFiles)) ?? [] {
                     // Copy each file or subdirectory
-                    try fileManager._copyItem(at: from, to: toDirectory.appendingPathComponent(from.lastPathComponent))
+                    try archiveFileManager.copyItem(at: from, to: toDirectory.appendingPathComponent(from.lastPathComponent), on: generateInFileManager)
                 }
             }
-            guard let jsonIndexData = fileManager.contents(atPath: archive.appendingPathComponent("index/index.json").path) else {
+            guard let jsonIndexData = archiveFileManager.contents(atPath: archiveRoot.appendingPathComponent("index/index.json").path) else {
+                // The path in the userInfo is slightly misleading, in that it might really be in a zipped archive, but doing it this way
+                // does mean we can see which one it's in.
                 throw CocoaError.error(.fileReadNoSuchFile, userInfo: [NSFilePathErrorKey: archive.appendingPathComponent("index/index.json").path])
             }
             let renderIndex = try JSONDecoder().decode(RenderIndex.self, from: jsonIndexData)
@@ -86,20 +140,26 @@ struct MergeAction: AsyncAction {
         
         switch landingPageInfo {
         case .synthesize(let configuration):
-            try synthesizeLandingPage(configuration, combinedIndex: &combinedJSONIndex, targetURL: targetURL)
+            try synthesizeLandingPage(configuration, combinedIndex: &combinedJSONIndex, targetURL: targetURL, fileManager: generateInFileManager)
         }
         
-        try fileManager.createFile(at: jsonIndexURL, contents: RenderJSONEncoder.makeEncoder(emitVariantOverrides: false).encode(combinedJSONIndex))
+        try generateInFileManager.createFile(at: jsonIndexURL, contents: RenderJSONEncoder.makeEncoder(emitVariantOverrides: false).encode(combinedJSONIndex))
         
-        try Self.moveOutput(from: targetURL, to: outputURL, fileManager: fileManager)
-        
+        if outputFormat == .archive {
+            let ramdisk = generateInFileManager as! RamDiskFileManager
+            try fileManager.createFile(at: outputURL, contents: ramdisk.generateZippedData())
+        } else {
+            try Self.moveOutput(from: targetURL, to: outputURL, fileManager: fileManager)
+        }
+
         return ActionResult(didEncounterError: false, outputs: [outputURL])
     }
     
     private func synthesizeLandingPage(
         _ configuration: LandingPageInfo.SynthesizeConfiguration,
         combinedIndex: inout RenderIndex,
-        targetURL: URL
+        targetURL: URL,
+        fileManager: any FileManagerProtocol
     ) throws {
         let landingPageName = configuration.name
         
@@ -108,7 +168,8 @@ struct MergeAction: AsyncAction {
         
         let reference = ResolvedTopicReference(bundleID: .init(rawValue: landingPageName), path: "/documentation", sourceLanguage: language)
         
-        let rootRenderReferences = try readRootNodeRenderReferencesIn(dataDirectory: targetURL.appendingPathComponent("data", isDirectory: true))
+        let rootRenderReferences = try readRootNodeRenderReferencesIn(dataDirectory: targetURL.appendingPathComponent("data", isDirectory: true),
+                                                                      on: fileManager)
         
         guard !rootRenderReferences.isEmpty else {
             // No need to synthesize a landing page if the combined archive is empty.
@@ -145,8 +206,9 @@ struct MergeAction: AsyncAction {
         
         // Gather all the top level /data/documentation and /data/tutorials directories to ensure that the different archives don't have overlapping data
         for archive in archives {
-            for typeOfDocumentation in (try? fileManager.contentsOfDirectory(at: archive.appendingPathComponent("data", isDirectory: true), includingPropertiesForKeys: nil, options: .skipsHiddenFiles)) ?? [] {
-                for moduleOrTechnologyName in (try? fileManager.contentsOfDirectory(at: typeOfDocumentation, includingPropertiesForKeys: nil, options: .skipsHiddenFiles)) ?? [] {
+            let (archiveRoot, archiveFileManager) = try rootAndManager(for: archive)
+            for typeOfDocumentation in (try? archiveFileManager.contentsOfDirectory(at: archiveRoot.appendingPathComponent("data", isDirectory: true), includingPropertiesForKeys: nil, options: .skipsHiddenFiles)) ?? [] {
+                for moduleOrTechnologyName in (try? archiveFileManager.contentsOfDirectory(at: typeOfDocumentation, includingPropertiesForKeys: nil, options: .skipsHiddenFiles)) ?? [] {
                     archivesByTopLevelDirectory[typeOfDocumentation.lastPathComponent, default: [:]][moduleOrTechnologyName.deletingPathExtension().lastPathComponent, default: []].insert(archive.lastPathComponent)
                 }
             }
@@ -195,8 +257,24 @@ struct MergeAction: AsyncAction {
     
     /// Validate that the output directory is empty.
     private func validateThatOutputIsEmpty() throws {
-        guard fileManager.directoryExists(atPath: outputURL.path) else {
-            return
+        switch outputFormat {
+            case .json:
+                guard fileManager.directoryExists(atPath: outputURL.path) else {
+                    return
+                }
+            case .archive:
+                var isDirectory: ObjCBool = false
+                if fileManager.fileExists(atPath: outputURL.path, isDirectory: &isDirectory) {
+                    struct FileAlreadyExists: DescribedError {
+                        var errorDescription: String {
+                            return """
+                            A file or directory already exists at the output path.
+                            """
+                        }
+                    }
+
+                    throw FileAlreadyExists()
+                }
         }
         
         let existingContents = (try? fileManager.contentsOfDirectory(at: outputURL, includingPropertiesForKeys: nil, options: .skipsHiddenFiles)) ?? []
@@ -229,13 +307,17 @@ struct MergeAction: AsyncAction {
     /// Validate that either all archives support static hosting or that no archives support static hosting.
     /// - Returns: `true` if all archives support static hosting; `false` otherwise.
     private func validateThatAllArchivesOrNoArchivesSupportStaticHosting() throws -> Bool {
-        let nonEmptyArchives = archives.filter {
-            fileManager.directoryExists(atPath: $0.appendingPathComponent("data").path)
-        }
-        
-        let archivesWithStaticHostingSupport = nonEmptyArchives.filter {
-            return fileManager.directoryExists(atPath: $0.appendingPathComponent("documentation").path)
-                || fileManager.directoryExists(atPath: $0.appendingPathComponent("tutorials").path)
+        var nonEmptyArchives: [URL] = []
+        var archivesWithStaticHostingSupport: [URL] = []
+        for archive in archives {
+            let (archiveRoot, archiveFileManager) = try rootAndManager(for: archive)
+            if archiveFileManager.directoryExists(atPath: archiveRoot.appendingPathComponent("data").path) {
+                nonEmptyArchives.append(archive)
+                if archiveFileManager.directoryExists(atPath: archiveRoot.appendingPathComponent("documentation").path)
+                   || archiveFileManager.directoryExists(atPath: archiveRoot.appendingPathComponent("tutorials").path) {
+                    archivesWithStaticHostingSupport.append(archive)
+                }
+            }
         }
         
         guard archivesWithStaticHostingSupport.count == nonEmptyArchives.count // All archives support static hosting

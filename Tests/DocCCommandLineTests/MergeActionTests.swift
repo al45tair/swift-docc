@@ -70,6 +70,7 @@ class MergeActionTests: XCTestCase {
             ],
             landingPageInfo: testLandingPageInfo,
             outputURL: URL(fileURLWithPath: "/Output.doccarchive"),
+            outputFormat: .json,
             fileManager: fileSystem
         )
         
@@ -198,6 +199,7 @@ class MergeActionTests: XCTestCase {
             ],
             landingPageInfo: testLandingPageInfo,
             outputURL: URL(fileURLWithPath: "/Output.doccarchive"),
+            outputFormat: .json,
             fileManager: fileSystem
         )
         
@@ -289,6 +291,7 @@ class MergeActionTests: XCTestCase {
             ],
             landingPageInfo: testLandingPageInfo,
             outputURL: URL(fileURLWithPath: "/Output.doccarchive"),
+            outputFormat: .json,
             fileManager: fileSystem
         )
         
@@ -410,6 +413,7 @@ class MergeActionTests: XCTestCase {
             ],
             landingPageInfo: testLandingPageInfo,
             outputURL: URL(fileURLWithPath: "/Output.doccarchive"),
+            outputFormat: .json,
             fileManager: fileSystem
         )
         
@@ -525,6 +529,7 @@ class MergeActionTests: XCTestCase {
             ],
             landingPageInfo: testLandingPageInfo,
             outputURL: URL(fileURLWithPath: "/Output.doccarchive"),
+            outputFormat: .json,
             fileManager: fileSystem
         )
         
@@ -639,6 +644,7 @@ class MergeActionTests: XCTestCase {
             ],
             landingPageInfo: testLandingPageInfo,
             outputURL: URL(fileURLWithPath: "/Output.doccarchive"),
+            outputFormat: .json,
             fileManager: fileSystem
         )
         
@@ -684,6 +690,7 @@ class MergeActionTests: XCTestCase {
             ],
             landingPageInfo: testLandingPageInfo,
             outputURL: URL(fileURLWithPath: "/Output.doccarchive"),
+            outputFormat: .json,
             fileManager: fileSystem
         )
 
@@ -764,6 +771,7 @@ class MergeActionTests: XCTestCase {
             ],
             landingPageInfo: testLandingPageInfo,
             outputURL: URL(fileURLWithPath: "/Output.doccarchive"),
+            outputFormat: .json,
             fileManager: fileSystem
         )
         
@@ -805,6 +813,7 @@ class MergeActionTests: XCTestCase {
             ],
             landingPageInfo: testLandingPageInfo,
             outputURL: URL(fileURLWithPath: "/Output.doccarchive"),
+            outputFormat: .json,
             fileManager: fileSystem
         )
         
@@ -870,6 +879,7 @@ class MergeActionTests: XCTestCase {
             ],
             landingPageInfo: testLandingPageInfo,
             outputURL: URL(fileURLWithPath: "/Output.doccarchive"),
+            outputFormat: .json,
             fileManager: fileSystem
         )
         
@@ -986,6 +996,7 @@ class MergeActionTests: XCTestCase {
             ],
             landingPageInfo: testLandingPageInfo,
             outputURL: combinedArchiveDir,
+            outputFormat: .json,
             fileManager: fileSystem
         )
         
@@ -1087,6 +1098,241 @@ class MergeActionTests: XCTestCase {
         )
     }
     
+    func testMergeWithZippedSourceArchives() async throws {
+        let fileSystem = try TestFileSystem(
+            files: [
+                Self.makeZippedArchive(
+                    name: "First",
+                    documentationPages: [
+                        "First",
+                        "First/SomeClass",
+                        "First/SomeClass/someProperty",
+                        "First/SomeClass/someFunction(:_)",
+                    ],
+                    tutorialPages: [
+                        "First",
+                        "First/SomeTutorial",
+                    ],
+                    images: ["something.png"],
+                    videos: ["something.mov"],
+                    downloads: ["something.zip"]
+                ),
+                Self.makeArchive(
+                    name: "Second",
+                    documentationPages: [
+                        "Second",
+                        "Second/SomeStruct",
+                        "Second/SomeStruct/someProperty",
+                        "Second/SomeStruct/someFunction(:_)",
+                    ],
+                    tutorialPages: [
+                        "Second",
+                        "Second/SomeTutorial",
+                    ],
+                    images: ["something.png"],
+                    videos: ["something.mov"],
+                    downloads: ["something.zip"]
+                ),
+            ]
+        )
+        
+        let logStorage = LogHandle.LogStorage()
+        let action = MergeAction(
+            archives: [
+                URL(fileURLWithPath: "/First.doccarchive"),
+                URL(fileURLWithPath: "/Second.doccarchive"),
+            ],
+            landingPageInfo: testLandingPageInfo,
+            outputURL: URL(fileURLWithPath: "/Output.doccarchive"),
+            outputFormat: .json,
+            fileManager: fileSystem
+        )
+        
+        _ = try await action.perform(logHandle: .memory(logStorage))
+        XCTAssertEqual(logStorage.text, "", "The action didn't log anything")
+        
+        // The combined archive as the data and assets from the input archives but only one set of archive template files
+        XCTAssertEqual(fileSystem.dump(subHierarchyFrom: "/Output.doccarchive"), """
+        Output.doccarchive/
+        ├─ css/
+        │  ╰─ something.css
+        ├─ data/
+        │  ├─ documentation.json
+        │  ├─ documentation/
+        │  │  ├─ first.json
+        │  │  ├─ first/
+        │  │  │  ├─ someclass.json
+        │  │  │  ╰─ someclass/
+        │  │  │     ├─ somefunction(:_).json
+        │  │  │     ╰─ someproperty.json
+        │  │  ├─ second.json
+        │  │  ╰─ second/
+        │  │     ├─ somestruct.json
+        │  │     ╰─ somestruct/
+        │  │        ├─ somefunction(:_).json
+        │  │        ╰─ someproperty.json
+        │  ╰─ tutorials/
+        │     ├─ first.json
+        │     ├─ first/
+        │     │  ╰─ sometutorial.json
+        │     ├─ second.json
+        │     ╰─ second/
+        │        ╰─ sometutorial.json
+        ├─ documentation/
+        │  ├─ first/
+        │  │  ├─ index.html
+        │  │  ╰─ someclass/
+        │  │     ├─ index.html
+        │  │     ├─ somefunction(:_)/
+        │  │     │  ╰─ index.html
+        │  │     ╰─ someproperty/
+        │  │        ╰─ index.html
+        │  ╰─ second/
+        │     ├─ index.html
+        │     ╰─ somestruct/
+        │        ├─ index.html
+        │        ├─ somefunction(:_)/
+        │        │  ╰─ index.html
+        │        ╰─ someproperty/
+        │           ╰─ index.html
+        ├─ downloads/
+        │  ├─ com.example.first/
+        │  │  ╰─ something.zip
+        │  ╰─ com.example.second/
+        │     ╰─ something.zip
+        ├─ favicon.svg
+        ├─ images/
+        │  ├─ com.example.first/
+        │  │  ╰─ something.png
+        │  ╰─ com.example.second/
+        │     ╰─ something.png
+        ├─ img/
+        │  ╰─ something.svg
+        ├─ index/
+        │  ╰─ index.json
+        ├─ js/
+        │  ╰─ something.js
+        ├─ metadata.json
+        ├─ tutorials/
+        │  ├─ first/
+        │  │  ├─ index.html
+        │  │  ╰─ sometutorial/
+        │  │     ╰─ index.html
+        │  ╰─ second/
+        │     ├─ index.html
+        │     ╰─ sometutorial/
+        │        ╰─ index.html
+        ╰─ videos/
+           ├─ com.example.first/
+           │  ╰─ something.mov
+           ╰─ com.example.second/
+              ╰─ something.mov
+        """)
+        
+        let synthesizedRootNode = try fileSystem.renderNode(atPath: "/Output.doccarchive/data/documentation.json")
+        XCTAssertEqual(synthesizedRootNode.metadata.title, "Test Landing Page Name")
+        XCTAssertEqual(synthesizedRootNode.metadata.roleHeading, "Test Landing Page Kind")
+        XCTAssertEqual(synthesizedRootNode.topicSectionsStyle, .detailedGrid)
+        XCTAssertEqual(synthesizedRootNode.topicSections.flatMap { [$0.title ?? ""] + $0.identifiers }, [
+            "Modules",
+            "doc://org.swift.test/documentation/first.json",
+            "doc://org.swift.test/documentation/second.json",
+
+            "Tutorials",
+            "doc://org.swift.test/tutorials/first.json",
+            "doc://org.swift.test/tutorials/second.json",
+        ])
+        XCTAssertEqual(synthesizedRootNode.references.keys.sorted(), [
+            "doc://org.swift.test/documentation/first.json",
+            "doc://org.swift.test/documentation/second.json",
+            "doc://org.swift.test/tutorials/first.json",
+            "doc://org.swift.test/tutorials/second.json",
+        ])
+    }
+
+    func testMergeWithZippedOutputArchive() async throws {
+                let fileSystem = try TestFileSystem(
+            files: [
+                Self.makeArchive(
+                    name: "First",
+                    documentationPages: [
+                        "First",
+                        "First/SomeClass",
+                        "First/SomeClass/someProperty",
+                        "First/SomeClass/someFunction(:_)",
+                    ],
+                    tutorialPages: [
+                        "First",
+                        "First/SomeTutorial",
+                    ],
+                    images: ["something.png"],
+                    videos: ["something.mov"],
+                    downloads: ["something.zip"]
+                ),
+                Self.makeZippedArchive(
+                    name: "Second",
+                    documentationPages: [
+                        "Second",
+                        "Second/SomeStruct",
+                        "Second/SomeStruct/someProperty",
+                        "Second/SomeStruct/someFunction(:_)",
+                    ],
+                    tutorialPages: [
+                        "Second",
+                        "Second/SomeTutorial",
+                    ],
+                    images: ["something.png"],
+                    videos: ["something.mov"],
+                    downloads: ["something.zip"]
+                ),
+            ]
+        )
+        
+        let logStorage = LogHandle.LogStorage()
+        let action = MergeAction(
+            archives: [
+                URL(fileURLWithPath: "/First.doccarchive"),
+                URL(fileURLWithPath: "/Second.doccarchive"),
+            ],
+            landingPageInfo: testLandingPageInfo,
+            outputURL: URL(fileURLWithPath: "/Output.doccarchive"),
+            outputFormat: .archive,
+            fileManager: fileSystem
+        )
+        
+        _ = try await action.perform(logHandle: .memory(logStorage))
+        XCTAssertEqual(logStorage.text, "", "The action didn't log anything")
+        
+        // The combined archive as the data and assets from the input archives but only one set of archive template files
+        XCTAssertEqual(fileSystem.dump(subHierarchyFrom: "/Output.doccarchive"), """
+        Output.doccarchive
+        """)
+        
+        let zippedData = try fileSystem.contents(of: URL(filePath: "/Output.doccarchive"))
+        let zipSource = ZipFileDataSource(data: zippedData)
+        let zipReader = try ZipFileReader(source: zipSource)
+
+        let synthesizedRootNode = try zipReader.renderNode(atPath: "/data/documentation.json")
+        XCTAssertEqual(synthesizedRootNode.metadata.title, "Test Landing Page Name")
+        XCTAssertEqual(synthesizedRootNode.metadata.roleHeading, "Test Landing Page Kind")
+        XCTAssertEqual(synthesizedRootNode.topicSectionsStyle, .detailedGrid)
+        XCTAssertEqual(synthesizedRootNode.topicSections.flatMap { [$0.title ?? ""] + $0.identifiers }, [
+            "Modules",
+            "doc://org.swift.test/documentation/first.json",
+            "doc://org.swift.test/documentation/second.json",
+
+            "Tutorials",
+            "doc://org.swift.test/tutorials/first.json",
+            "doc://org.swift.test/tutorials/second.json",
+        ])
+        XCTAssertEqual(synthesizedRootNode.references.keys.sorted(), [
+            "doc://org.swift.test/documentation/first.json",
+            "doc://org.swift.test/documentation/second.json",
+            "doc://org.swift.test/tutorials/first.json",
+            "doc://org.swift.test/tutorials/second.json",
+        ])
+    }
+
     // MARK: Test helpers
     
     func testMakeArchive() throws {
@@ -1308,9 +1554,37 @@ class MergeActionTests: XCTestCase {
         
         return Folder(name: "\(name).doccarchive", content: content)
     }
+
+    static func makeZippedArchive(
+        name: String,
+        documentationPages: [String],
+        tutorialPages: [String],
+        images: [String] = [],
+        videos: [String] = [],
+        downloads: [String] = [],
+        supportsStaticHosting: Bool = true
+    ) throws -> DataFile {
+        let sourceFilesystem = try TestFileSystem(
+            folders: [
+                Self.makeArchive(name: name,
+                                 documentationPages: documentationPages,
+                                 tutorialPages: tutorialPages,
+                                 images: images,
+                                 videos: videos,
+                                 downloads: downloads,
+                                 supportsStaticHosting: supportsStaticHosting)
+            ]
+        )
+        let ramdisk = RamDiskFileManager()
+        try sourceFilesystem.copyItem(at: URL(filePath: "/\(name).doccarchive"),
+                                      to: URL(filePath: "/"),
+                                      on: ramdisk)
+        return DataFile(name: "\(name).doccarchive",
+                        data: try ramdisk.generateZippedData())
+    }
 }
 
-private extension TestFileSystem {
+private extension ReadOnlyFileManagerProtocol {
     func renderNode(atPath path: String) throws -> RenderNode {
         let data = try contents(of: URL(fileURLWithPath: path))
         

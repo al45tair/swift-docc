@@ -8,7 +8,7 @@
  See https://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
-import Foundation
+public import Foundation
 internal import ZLib
 
 enum ZipFileError: Error {
@@ -20,12 +20,13 @@ enum ZipFileError: Error {
     case duplicateEntry(String)
     case fileNotFound(String)
     case itemIsADirectory(String)
+    case itemIsNotADirectory(String)
     case unsupportedCompression(String)
     case badLocalHeader(for: String)
     case unsupportedVersion(UInt16)
 }
 
-protocol ZipFileSource {
+public protocol ZipFileSource {
     /// The length of the source
     var length: Int { get }
 
@@ -43,7 +44,7 @@ protocol ZipFileSource {
 }
 
 /// A ZipFileReader can be used to read data from a .zip file.
-class ZipFileReader<S: ZipFileSource> {
+public class ZipFileReader<S: ZipFileSource> {
 
     var source: S
 
@@ -130,7 +131,7 @@ class ZipFileReader<S: ZipFileSource> {
         kind: .directory([:])
     )
 
-    init(source: S) throws {
+    public init(source: S) throws {
         self.source = source
         try readDirectory()
     }
@@ -421,7 +422,7 @@ class ZipFileReader<S: ZipFileSource> {
         return item
     }
 
-    func fileExists(
+    public func fileExists(
         atPath path: String,
         isDirectory: UnsafeMutablePointer<ObjCBool>?
     ) -> Bool {
@@ -436,7 +437,7 @@ class ZipFileReader<S: ZipFileSource> {
         return true
     }
 
-    func directoryExists(atPath path: String) -> Bool {
+    public func directoryExists(atPath path: String) -> Bool {
         guard let item = item(at: path) else {
             return false
         }
@@ -444,7 +445,7 @@ class ZipFileReader<S: ZipFileSource> {
         return item.isDirectory
     }
 
-    func fileExists(atPath path: String) -> Bool {
+    public func fileExists(atPath path: String) -> Bool {
         guard let item = item(at: path) else {
             return false
         }
@@ -452,7 +453,7 @@ class ZipFileReader<S: ZipFileSource> {
         return item.isFile
     }
 
-    class File {
+    public class File {
         var reader: ZipFileReader
         var stream: z_stream
         var buffer: UnsafeMutableRawBufferPointer?
@@ -493,7 +494,7 @@ class ZipFileReader<S: ZipFileSource> {
             }
         }
 
-        func read(into span: inout OutputRawSpan) throws {
+        public func read(into span: inout OutputRawSpan) throws {
             if isCompressed {
                 guard let buffer else {
                     fatalError("buffer is somehow unset")
@@ -548,7 +549,7 @@ class ZipFileReader<S: ZipFileSource> {
         }
     }
 
-    func open(path: String) throws -> File {
+    public func open(path: String) throws -> File {
         guard let item = item(at: path) else {
             throw ZipFileError.fileNotFound(path)
         }
@@ -606,7 +607,7 @@ class ZipFileReader<S: ZipFileSource> {
 
 extension ZipFileSource {
     /// Read a fixed-width integer, in little-endian order
-    func read<T: FixedWidthInteger>(from offset: Int, as: T.Type) throws -> T {
+    public func read<T: FixedWidthInteger>(from offset: Int, as: T.Type) throws -> T {
         return try withUnsafeTemporaryAllocation(
             byteCount: MemoryLayout<T>.size,
             alignment: MemoryLayout<T>.alignment
@@ -626,7 +627,7 @@ extension ZipFileSource {
     }
 
     /// Read a UTF-8 string
-    func read(from offset: Int, asStringOfLength length: Int) throws -> String {
+    public func read(from offset: Int, asStringOfLength length: Int) throws -> String {
         return try withUnsafeTemporaryAllocation(byteCount: length, alignment: 1) {
             buffer in
 

@@ -478,4 +478,40 @@ public class RamDiskFileManager: FileManagerProtocol {
 
         return total
     }
+
+    /// Generate a Zip file containing the contents of this ramdisk.
+    public func generateZippedData() throws -> Data {
+        let sink = ZipFileDataSink()
+        let zipWriter = ZipFileWriter(sink: sink)
+        var stack = [(root, "")]
+        let now = Date.now
+
+        while let (item, path) = stack.popLast() {
+            guard case let .directory(contents) = item.kind else {
+                fatalError("Unexpected non-directory in item stack")
+            }
+
+            for (name, item) in contents {
+                let fullPath = "\(path)/\(name)"
+                switch item.kind {
+                    case let .file(data):
+                        try zipWriter.withFile(
+                            named: fullPath,
+                            date: now) { write in
+                            try write(data.bytes)
+                        }
+                    case .directory:
+                        try zipWriter.addDirectory(
+                            named: fullPath,
+                            date: now
+                        )
+                        stack.append((item, fullPath))
+                }
+            }
+        }
+
+        try zipWriter.close()
+
+        return sink.data
+    }
 }

@@ -10,7 +10,7 @@
 
 public import Foundation
 
-/// A read-write file manager.
+/// A read-only file manager.
 ///
 /// A file-system manager is a type that's central to *managing* files on
 /// a file-system, it performs actions like creating new files, copying, renaming
@@ -22,8 +22,8 @@ public import Foundation
 /// Should you need a file system with a different storage, create your own
 /// protocol implementations to manage files in memory,
 /// on a network, in a database, or elsewhere.
-public protocol FileManagerProtocol: DataProvider {
-    
+public protocol ReadOnlyFileManagerProtocol: DataProvider {
+
     /// Returns the data content of a file at the given path, if it exists.
     func contents(atPath: String) -> Data?
     /// Compares the contents of two files at the given paths.
@@ -40,16 +40,60 @@ public protocol FileManagerProtocol: DataProvider {
     func fileExists(atPath: String) -> Bool
     /// Copies a file from one location on the file-system to another.
     func copyItem(at: URL, to: URL, on: any FileManagerProtocol) throws
+    /// Returns a list of items in a directory
+    func contentsOfDirectory(atPath path: String) throws -> [String]
+    func contentsOfDirectory(at url: URL, includingPropertiesForKeys keys: [URLResourceKey]?, options mask: FileManager.DirectoryEnumerationOptions) throws -> [URL]
+    
+    /// Returns the data content of a file at the given URL.
+    ///
+    /// - Parameters:
+    ///   - url: The location to create the file
+    ///
+    /// - Note: This method doesn't exist on ``FileManager``.
+    ///         There is a similar looking method but it doesn't provide information about potential errors.
+    ///
+    /// - Throws: If the file couldn't be read.
+    func contents(of url: URL) throws -> Data
+    
+    /// Performs a shallow search of the specified directory and returns the file and directory URLs for the contained items.
+    ///
+    /// - Parameters:
+    ///   - url: The URL for the directory whose contents to enumerate.
+    ///   - mark: Options for the enumeration. Because this method performs only shallow enumerations, the only supported option is `skipsHiddenFiles`.
+    /// - Returns: The URLs of each file and directory that's contained in `url`.
+    func contentsOfDirectory(at url: URL, options mask: FileManager.DirectoryEnumerationOptions) throws -> (files: [URL], directories: [URL])
+
+    /// Calculates the total size of the files in the specified directory.
+    ///
+    /// - Parameters:
+    ///   - url: The URL for the directory to compute the size of.
+    /// - Returns: The total size, in bytes, of the specified directory and its contents.
+    func sizeOfDirectory(at url: URL, options mask: FileManager.DirectoryEnumerationOptions) throws -> Int64
+
+}
+
+/// A read-write file manager.
+///
+/// A file-system manager is a type that's central to *managing* files on
+/// a file-system, it performs actions like creating new files, copying, renaming
+/// and deleting files, and organizing them in directories.
+///
+/// The Cocoa `FileManager` type is the default implementation of that protocol
+/// that manages files stored on disk.
+///
+/// Should you need a file system with a different storage, create your own
+/// protocol implementations to manage files in memory,
+/// on a network, in a database, or elsewhere.
+public protocol FileManagerProtocol: ReadOnlyFileManagerProtocol {
+    
+    /// Removes an item from the filesystem.
+    func removeItem(at: URL) throws
     /// Copies a file from one location on the file-system to another.
     func _copyItem(at: URL, to: URL) throws // Use a different name than FileManager to work around https://github.com/swiftlang/swift-foundation/issues/1125
     /// Moves a file from one location on the file-system to another.
     func moveItem(at: URL, to: URL, on: any FileManagerProtocol) throws
     /// Moves a file from one location on the file-system to another.
     func moveItem(at: URL, to: URL) throws
-    /// Creates a new file folder at the given location.
-    func createDirectory(at: URL, withIntermediateDirectories: Bool, attributes: [FileAttributeKey : Any]?) throws
-    /// Removes a file from the given location.
-    func removeItem(at: URL) throws
     /// Returns a list of items in a directory
     func contentsOfDirectory(atPath path: String) throws -> [String]
     func contentsOfDirectory(at url: URL, includingPropertiesForKeys keys: [URLResourceKey]?, options mask: FileManager.DirectoryEnumerationOptions) throws -> [URL]
@@ -71,17 +115,6 @@ public protocol FileManagerProtocol: DataProvider {
     /// - Throws: If the file couldn't be created with the specified contents.
     func createFile(at: URL, contents: Data) throws
     
-    /// Returns the data content of a file at the given URL.
-    ///
-    /// - Parameters:
-    ///   - url: The location to create the file
-    ///
-    /// - Note: This method doesn't exist on ``FileManager``.
-    ///         There is a similar looking method but it doesn't provide information about potential errors.
-    ///
-    /// - Throws: If the file couldn't be read.
-    func contents(of url: URL) throws -> Data
-    
     /// Creates a file with the given contents at the given url with the specified
     /// writing options.
     ///
@@ -92,33 +125,34 @@ public protocol FileManagerProtocol: DataProvider {
     ///              writing options of the file manager.
     func createFile(at location: URL, contents: Data, options writingOptions: NSData.WritingOptions?) throws
 
-    /// Performs a shallow search of the specified directory and returns the file and directory URLs for the contained items.
+    /// Creates a directory at the given url with the specified attributes.
     ///
     /// - Parameters:
-    ///   - url: The URL for the directory whose contents to enumerate.
-    ///   - mark: Options for the enumeration. Because this method performs only shallow enumerations, the only supported option is `skipsHiddenFiles`.
-    /// - Returns: The URLs of each file and directory that's contained in `url`.
-    func contentsOfDirectory(at url: URL, options mask: FileManager.DirectoryEnumerationOptions) throws -> (files: [URL], directories: [URL])
-
-    /// Calculates the total size of the files in the specified directory.
+    ///   - at: The location to create the directory
+    ///   - withIntermediateDirectories: If `true`, create any parent directories
+    ///         that do not currently exist
+    ///   - attributes: Attributes to set on the newly created directory
     ///
-    /// - Parameters:
-    ///   - url: The URL for the directory to compute the size of.
-    /// - Returns: The total size, in bytes, of the specified directory and its contents.
-    func sizeOfDirectory(at url: URL, options mask: FileManager.DirectoryEnumerationOptions) throws -> Int64
+    /// - Throws: If the directory couldn't be created.
+    func createDirectory(at: URL, withIntermediateDirectories: Bool, attributes: [FileAttributeKey: Any]?) throws
 }
 
-extension FileManagerProtocol {
+extension ReadOnlyFileManagerProtocol {
+
+    public func contentsEqual(atPath path1: String, andPath path2: String) -> Bool {
+        guard let content1 = contents(atPath: path1),
+              let content2 = contents(atPath: path2) else {
+            return false
+        }
+
+        return content1 == content2
+    }
+
     /// Returns a Boolean value that indicates whether a directory exists at a specified path.
     public func directoryExists(atPath path: String) -> Bool {
         var isDirectory = ObjCBool(booleanLiteral: false)
         let fileExistsAtPath = fileExists(atPath: path, isDirectory: &isDirectory)
         return fileExistsAtPath && isDirectory.boolValue
-    }
-
-    public func moveItem(at source: URL, to destination: URL, on otherFileManager: any FileManagerProtocol) throws {
-        try self.copyItem(at: source, to: destination, on: otherFileManager)
-        try self.removeItem(at: source)
     }
 
     public func copyItem(at source: URL, to destination: URL, on otherFileManager: any FileManagerProtocol) throws {
@@ -141,6 +175,28 @@ extension FileManagerProtocol {
         }
 
     }
+
+    public func contentsOfDirectory(at url: URL, options mask: FileManager.DirectoryEnumerationOptions) throws -> (files: [URL], directories: [URL]) {
+        var allContents = try contentsOfDirectory(at: url, includingPropertiesForKeys: [.isDirectoryKey], options: .skipsHiddenFiles)
+
+        let partitionIndex = try allContents.partition {
+            try $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true
+        }
+        return (
+            files:       Array( allContents[..<partitionIndex] ),
+            directories: Array( allContents[partitionIndex...] )
+        )
+    }
+    
+}
+
+extension FileManagerProtocol {
+
+    public func moveItem(at source: URL, to destination: URL, on otherFileManager: any FileManagerProtocol) throws {
+        try self.copyItem(at: source, to: destination, on: otherFileManager)
+        try self.removeItem(at: source)
+    }
+
 }
 
 /// Add compliance to `FileManagerProtocol` to `FileManager`,
@@ -169,19 +225,6 @@ extension FileManager: FileManagerProtocol {
         temporaryDirectory.appendingPathComponent(ProcessInfo.processInfo.globallyUniqueString, isDirectory: true)
     }
 
-    // This method doesn't exist on `FileManger`. We define it on the protocol to enable the FileManager to provide an implementation that avoids repeated reads to discover which contained items are files and which are directories.
-    public func contentsOfDirectory(at url: URL, options mask: DirectoryEnumerationOptions) throws -> (files: [URL], directories: [URL]) {
-        var allContents = try contentsOfDirectory(at: url, includingPropertiesForKeys: [.isDirectoryKey], options: .skipsHiddenFiles)
-
-        let partitionIndex = try allContents.partition {
-            try $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true
-        }
-        return (
-            files:       Array( allContents[..<partitionIndex] ),
-            directories: Array( allContents[partitionIndex...] )
-        )
-    }
-    
     public func _copyItem(at source: URL, to destination: URL) throws {
         // Call `NSFileManager/copyItem(at:to:)` and catch the error to workaround https://github.com/swiftlang/swift-foundation/issues/1125
         do {
@@ -255,3 +298,5 @@ extension FileManager: FileManagerProtocol {
         return bytes
     }
 }
+
+extension FileManager: ReadOnlyFileManagerProtocol {}

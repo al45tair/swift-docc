@@ -486,33 +486,8 @@ public struct ConvertAction: AsyncAction {
                 try signposter.withIntervalSignpost("Compress data") {
                     // In archive mode, we have all of the files now in the ramdisk; generate zip output.
                     let ramdisk = generateInFileManager as! RamDiskFileManager
-                    let sink = ZipFileDataSink()
-                    let zipWriter = ZipFileWriter(sink: sink)
-                    var urlStack: [URL] = [URL(filePath: "/")]
-                    let now = Date.now
 
-                    while let url = urlStack.popLast() {
-                        let (files, directories) = try ramdisk.contentsOfDirectory(at: url, options: [])
-                        for directory in directories {
-                            try zipWriter.addDirectory(
-                                named: directory.path,
-                                date: now
-                            )
-                            urlStack.append(directory)
-                        }
-                        for file in files {
-                            let data = try ramdisk.contents(of: file)
-                            try zipWriter.withFile(
-                                named: file.path,
-                                date: now) { write in
-                                try write(data.bytes)
-                            }
-                        }
-                    }
-
-                    try zipWriter.close()
-
-                    try outputFileManager.createFile(at: targetURL, contents: sink.data)
+                    try outputFileManager.createFile(at: targetURL, contents: ramdisk.generateZippedData())
                 }
             } else {
                 try signposter.withIntervalSignpost("Move output") {

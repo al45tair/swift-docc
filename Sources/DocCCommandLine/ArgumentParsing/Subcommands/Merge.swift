@@ -66,6 +66,10 @@ extension Docc {
             
             var outputURL: URL!
             
+            /// The format that the convert action will output the documentation in when writing to the specific output location.
+            @Option(name: .long, help: "The output format to use.")
+            var outputFormat: OutputFormat = .json
+
             mutating func validate() throws {
                 let fileManager = Docc.Merge._fileManager
                 
@@ -146,6 +150,28 @@ extension Docc {
             var topicStyle: TopicsVisualStyle.Style = .detailedGrid
         }
         
+        /// The possible output (file) formats that the convert action can use for the documentation output.
+        package enum OutputFormat: ExpressibleByArgument {
+            /// Output each page as a JSON file---in the format described in RenderNode.spec.json---to be consumed by Swift-DocC Render.
+            case json
+            /// Output a zip file containing JSON files
+            case archive
+
+            package init?(argument: String) {
+                switch argument {
+                    case "json": self = .json
+                    
+                    case "archive": self = .archive
+
+                    default: return nil
+                }
+            }
+            
+            package static var allValueStrings: [String] {
+                ["archive", "json"]
+            }
+        }
+
         public func run() async throws {
             // Initialize a `ConvertAction` from the current options in the `Convert` command.
             let convertAction = MergeAction(
@@ -158,6 +184,7 @@ extension Docc {
                     )
                 ),
                 outputURL: inputsAndOutputs.outputURL,
+                outputFormat: inputsAndOutputs.outputFormat,
                 fileManager: Self._fileManager
             )
             
