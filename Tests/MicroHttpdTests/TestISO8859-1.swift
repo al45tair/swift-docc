@@ -1,0 +1,54 @@
+import Testing
+
+@testable import MicroHttpd
+
+@Test func testISO8859_1() {
+    struct TestCase {
+        var string: String
+        var bytes: [UInt8]
+
+        init(_ string: String, _ bytes: [UInt8]) {
+            self.string = string
+            self.bytes = bytes
+        }
+    }
+
+    let tests: [TestCase] = [
+        TestCase(
+            "The quick brown fox jumps over the lazy dog",
+            [
+                0x54, 0x68, 0x65, 0x20, 0x71, 0x75, 0x69, 0x63, 0x6b, 0x20,
+                0x62, 0x72, 0x6f, 0x77, 0x6e, 0x20, 0x66, 0x6f, 0x78, 0x20,
+                0x6a, 0x75, 0x6d, 0x70, 0x73, 0x20, 0x6f, 0x76, 0x65, 0x72,
+                0x20, 0x74, 0x68, 0x65, 0x20, 0x6c, 0x61, 0x7a, 0x79, 0x20,
+                0x64, 0x6f, 0x67,
+            ]
+        ),
+
+        TestCase(
+            "La deuxième chanson de Noël était décevante.",
+            [
+                0x4c, 0x61, 0x20, 0x64, 0x65, 0x75, 0x78, 0x69, 0xe8, 0x6d,
+                0x65, 0x20, 0x63, 0x68, 0x61, 0x6e, 0x73, 0x6f, 0x6e, 0x20,
+                0x64, 0x65, 0x20, 0x4e, 0x6f, 0xeb, 0x6c, 0x20, 0xe9, 0x74,
+                0x61, 0x69, 0x74, 0x20, 0x64, 0xe9, 0x63, 0x65, 0x76, 0x61,
+                0x6e, 0x74, 0x65, 0x2e,
+            ]
+        ),
+    ]
+
+    for test in tests {
+        let decoded = String(decoding: test.bytes, as: ISO8859_1.self)
+        var encoded: [UInt8] = []
+        let _ = transcode(
+            test.string.utf8.makeIterator(),
+            from: UTF8.self,
+            to: ISO8859_1.self,
+            stoppingOnError: false,
+            into: { encoded.append($0) }
+        )
+
+        #expect(decoded == test.string)
+        #expect(encoded == test.bytes)
+    }
+}

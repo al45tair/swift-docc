@@ -39,7 +39,7 @@ func swiftSettings(_ languageMode: SwiftLanguageMode) -> [SwiftSetting] {
 let package = Package(
     name: "SwiftDocC",
     platforms: [
-        .macOS(.v13),
+        .macOS(.v15),
         .iOS(.v16)
     ],
     products: [
@@ -60,6 +60,7 @@ let package = Package(
                 .target(name: "DocCCommon"),
                 .target(name: "DocCHTML"),
                 .target(name: "ZLib"),
+                .target(name: "MicroHttpd"),
                 .product(name: "Markdown", package: "swift-markdown"),
                 .product(name: "SymbolKit", package: "swift-docc-symbolkit"),
                 .product(name: "CLMDB", package: "swift-lmdb"),
@@ -83,12 +84,25 @@ let package = Package(
             ],
             swiftSettings: swiftSettings(.v5)
         ),
+        // MicroHttpd library
+        .target(
+            name: "MicroHttpd",
+            swiftSettings: swiftSettings(.v6)
+        ),
+        .testTarget(
+            name: "MicroHttpdTests",
+            dependencies: [
+                .target(name: "MicroHttpd")
+            ],
+            swiftSettings: swiftSettings(.v6)
+        ),
         // Command-line tool library
         .target(
             name: "DocCCommandLine",
             dependencies: [
                 .target(name: "SwiftDocC"),
                 .target(name: "DocCCommon"),
+                .target(name: "MicroHttpd"),
                 .product(name: "NIOHTTP1", package: "swift-nio", condition: .when(platforms: [.macOS, .iOS, .linux, .android])),
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
             ],

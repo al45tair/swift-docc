@@ -44,7 +44,7 @@ public protocol ZipFileSource {
 }
 
 /// A ZipFileReader can be used to read data from a .zip file.
-public class ZipFileReader<S: ZipFileSource> {
+public class ZipFileReader<S: ZipFileSource>: @unchecked Sendable {
 
     var source: S
 
