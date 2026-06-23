@@ -11,7 +11,7 @@
 public import Foundation
 internal import ZLib
 
-enum ZipFileError: Error {
+enum ZipFileError: Error, DescribedError {
     case noCentralDirectory
     case readOffEndOfSource
     case spannedArchivesNotSupported
@@ -24,6 +24,35 @@ enum ZipFileError: Error {
     case unsupportedCompression(String)
     case badLocalHeader(for: String)
     case unsupportedVersion(UInt16)
+
+    var errorDescription: String {
+        switch self {
+            case .noCentralDirectory: 
+                "Zip file central directory missing"
+            case .readOffEndOfSource: 
+                "Attempt to read off end of zip file"
+            case .spannedArchivesNotSupported: 
+                "Spanned zip archives are not supported"
+            case .badDirectoryEntry(let ndx): 
+                "Bad zip directory entry at \(ndx)"
+            case .badPathInDirectory(let path): 
+                "Bad path in zip directory: \"\(path)\""
+            case .duplicateEntry(let path):
+                "Duplicate entry in zip directory: \"\(path)\""
+            case .fileNotFound(let path):
+                "File not found in zip: \"\(path)\""
+            case .itemIsADirectory(let path):
+                "Item in zip at path \"\(path)\" is a directory"
+            case .itemIsNotADirectory(let path):
+                "Item in zip at path \"\(path)\" is not a directory"
+            case .unsupportedCompression(let path):
+                "Unsupported compression for item in zip with path \"\(path)\""
+            case .badLocalHeader(for: let path):
+                "Bad local header in zip for \"\(path)\""
+            case .unsupportedVersion(let version):
+                "Unsupported zip version \(version)"
+        }
+    }
 }
 
 public protocol ZipFileSource {
@@ -179,7 +208,7 @@ public class ZipFileReader<S: ZipFileSource>: @unchecked Sendable {
                     && span.bytes.unsafeLoad(fromByteOffset: pos + 2, as: UInt8.self) == 0x05
                     && span.bytes.unsafeLoad(fromByteOffset: pos + 3, as: UInt8.self) == 0x06
                 {
-                    return pos
+                    return source.length - toRead + pos
                 }
                 pos -= 4
             case 0x4b:  // 'K'

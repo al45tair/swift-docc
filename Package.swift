@@ -103,7 +103,6 @@ let package = Package(
                 .target(name: "SwiftDocC"),
                 .target(name: "DocCCommon"),
                 .target(name: "MicroHttpd"),
-                .product(name: "NIOHTTP1", package: "swift-nio", condition: .when(platforms: [.macOS, .iOS, .linux, .android])),
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
             ],
             exclude: ["CMakeLists.txt"],
@@ -227,7 +226,6 @@ let package = Package(
 if ProcessInfo.processInfo.environment["SWIFTCI_USE_LOCAL_DEPS"] == nil {
     // Building standalone, so fetch all dependencies remotely.
     package.dependencies += [
-        .package(url: "https://github.com/apple/swift-nio.git", from: "2.92.2"),
         .package(url: "https://github.com/swiftlang/swift-markdown.git", branch: "main"),
         .package(url: "https://github.com/swiftlang/swift-lmdb.git", branch: "main"),
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.2.2"),
@@ -238,7 +236,6 @@ if ProcessInfo.processInfo.environment["SWIFTCI_USE_LOCAL_DEPS"] == nil {
 } else {
     // Building in the Swift.org CI system, so rely on local versions of dependencies.
     package.dependencies += [
-        .package(path: "../swift-nio"),
         .package(path: "../swift-markdown"),
         .package(path: "../swift-lmdb"),
         .package(path: "../swift-argument-parser"),

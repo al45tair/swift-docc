@@ -319,7 +319,7 @@ public struct ConvertAction: AsyncAction {
 //        }
 
         let indexHTML: URL?
-        if let htmlTemplateDirectory, outputFormat == .json {
+        if let htmlTemplateDirectory, outputFormat == .json || outputFormat == .archive {
             let indexHTMLUrl = generateInFolder.appendingPathComponent(
                 HTMLTemplate.indexFileName.rawValue,
                 isDirectory: false
@@ -486,6 +486,11 @@ public struct ConvertAction: AsyncAction {
                 try signposter.withIntervalSignpost("Compress data") {
                     // In archive mode, we have all of the files now in the ramdisk; generate zip output.
                     let ramdisk = generateInFileManager as! RamDiskFileManager
+
+                    var isDir: ObjCBool = false
+                    if outputFileManager.fileExists(atPath: targetURL.path, isDirectory: &isDir) {
+                        try outputFileManager.removeItem(at: targetURL)
+                    }
 
                     try outputFileManager.createFile(at: targetURL, contents: ramdisk.generateZippedData())
                 }

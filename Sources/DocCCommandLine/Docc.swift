@@ -11,25 +11,23 @@
 public import ArgumentParser
 
 private var subcommands: [any AsyncParsableCommand.Type] {
-    var subcommands: [any AsyncParsableCommand.Type] = [
+    let subcommands: [any AsyncParsableCommand.Type] = [
         Docc.Convert.self,
         Docc.ProcessArchive.self,
         Docc.ProcessCatalog.self,
         Docc._Index.self,
         Docc.Init.self,
         Docc.Merge.self,
+        Docc.Preview.self
     ]
-#if canImport(NIOHTTP1)
-    subcommands.insert(Docc.Preview.self, at: 1)
-#endif
     return subcommands
 }
 
 private var usage: String {
-    var usage = "docc convert [<catalog-path>] [--additional-symbol-graph-dir <symbol-graph-dir>] [<other-options>]"
-#if canImport(NIOHTTP1)
-    usage.append("\ndocc preview [<catalog-path>] [--port <port-number>] [--additional-symbol-graph-dir <symbol-graph-dir>] [--output-dir <output-dir>] [<other-options>]")
-#endif
+    let usage = """
+    docc convert [<catalog-path>] [--additional-symbol-graph-dir <symbol-graph-dir>] [<other-options>]
+    docc preview [<catalog-path>] [--port <port-number>] [--additional-symbol-graph-dir <symbol-graph-dir>] [--output-dir <output-dir>] [<other-options>]
+    """
     return usage
 }
 

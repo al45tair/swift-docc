@@ -22,15 +22,6 @@ under the License.
 
 -------------------------------------------------------------------------------
 
-This product contains Swift NIO.
-
-  * LICENSE (Apache License 2.0):
-    * https://www.apache.org/licenses/LICENSE-2.0
-  * HOMEPAGE:
-    * https://github.com/apple/swift-nio
-
----
-
 This product contains Swift Crypto.
 
   * LICENSE (Apache License 2.0):

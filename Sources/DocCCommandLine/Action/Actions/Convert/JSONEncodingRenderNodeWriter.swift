@@ -81,7 +81,7 @@ class JSONEncodingRenderNodeWriter {
         if outputFileManager.fileExists(atPath: htmlTargetFileURL.path) {
             try outputFileManager.removeItem(at: htmlTargetFileURL)
         }
-        try fileManager.copyItem(at: indexHTML, to: htmlTargetFileURL, on: outputFileManager)
+        try outputFileManager.copyItem(at: indexHTML, to: htmlTargetFileURL, on: outputFileManager)
     }
     
     /// Writes a markdown node to a file at a location based on the node's relative URL.

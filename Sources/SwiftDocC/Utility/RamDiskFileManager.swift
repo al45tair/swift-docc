@@ -20,7 +20,7 @@ enum RamDiskError: Error {
 }
 
 /// A simple FileManagerProtocol implementation that holds data in memory.
-public class RamDiskFileManager: FileManagerProtocol {
+public class RamDiskFileManager: FileManagerProtocol, @unchecked Sendable {
     class Item {
         enum Kind {
             case directory([String: Item])

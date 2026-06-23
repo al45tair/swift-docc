@@ -10,24 +10,20 @@
 
 import Foundation
 public import SwiftDocC
+import MicroHttpd
 
-#if canImport(NIOHTTP1)
 /// A preview server instance.
-var servers: [String: PreviewServer] = [:]
+var servers: [String: MicroHttpd] = [:]
 
 fileprivate func trapSignals() {
     // When the user stops docc - stop the preview server first before exiting.
     Signal.on(Signal.all) { _ in
         // This C function wrapper can't capture context so we print to the standard output.
         print("Stopping preview...")
-        do {
-            // This will unblock the execution at `server.start()`.
-            for server in servers.values {
-                try server.stop()
-            }
-        } catch {
-            print(error.localizedDescription)
-            exit(1)
+
+        // This will unblock the execution at `server.start()`.
+        for server in servers.values {
+            server.stop()
         }
     }
 }
@@ -44,9 +40,6 @@ public final class PreviewAction: AsyncAction {
     var convertAction: ConvertAction
 
     private var previewPaths: [String] = []
-    
-    // Use for testing to override binding to a system port
-    var bindServerToSocketPath: String?
     
     /// This closure is used to create a new convert action to generate a new version of the docs
     /// whenever the user changes a file in the watched directory.
@@ -105,10 +98,10 @@ public final class PreviewAction: AsyncAction {
     }
 
     /// Stops a currently running preview session.
-    func stop() throws {
+    func stop() {
         monitoredConvertTask?.cancel()
         
-        try servers[serverIdentifier]?.stop()
+        servers[serverIdentifier]?.stop()
         servers.removeValue(forKey: serverIdentifier)
     }
     
@@ -129,19 +122,41 @@ public final class PreviewAction: AsyncAction {
                 print(String(repeating: "=", count: 40))
             }
 
-            let to: PreviewServer.Bind = bindServerToSocketPath.map { .socket(path: $0) } ?? .localhost(port: port)
-            var logHandleCopy = logHandle.sync { $0 }
-            servers[serverIdentifier] = try PreviewServer(contentURL: convertAction.targetURL, bindTo: to, logHandle: &logHandleCopy, fileManager: FileManager.default)
+            let convertURL = convertAction.targetURL.absoluteURL
+
+            print("Serving from \(convertURL)")
+
+            let fileSystem: any ReadOnlyFileManagerProtocol
+            let rootURL: URL
+            if FileManager.default.directoryExists(
+                atPath: convertURL.path
+            ) {
+                rootURL = convertAction.targetURL
+                fileSystem = FileManager.default
+            } else {
+                let zippedData = try FileManager.default.contents(of: convertURL)
+                let zipDataSource = ZipFileDataSource(data: zippedData)
+                let zipReader = try ZipFileReader(source: zipDataSource)
+
+                rootURL = URL(filePath: "/")
+                fileSystem = zipReader
+            }
+
+            let previewHandler = PreviewRequestHandler(
+                archiveRoot: rootURL,
+                fileSystem: fileSystem
+            )
+
+            servers[serverIdentifier] = MicroHttpd(
+                port: UInt16(port),
+                requestHandler: previewHandler
+            )
             
             // When the user stops docc - stop the preview server first before exiting.
             trapSignals()
 
-            // Monitor the source folder if possible.
-            #if !os(Linux) && !os(Android)
-            try watch()
-            #endif
             // This will wait until the server is manually killed.
-            try servers[serverIdentifier]!.start()
+            try servers[serverIdentifier]!.serve()
             previewResult = ActionResult(didEncounterError: false)
         } catch {
             let diagnosticEngine = convertAction.diagnosticEngine
@@ -187,48 +202,6 @@ public final class PreviewAction: AsyncAction {
     
     fileprivate var monitoredConvertTask: Task<Void, Never>?
 }
-
-// Monitoring a source folder: Asynchronous output reading and file system events are supported only on macOS.
-
-#if !os(Linux) && !os(Android)
-/// If needed, a retained directory monitor.
-fileprivate var monitor: DirectoryMonitor! = nil
-
-extension PreviewAction {
-    private func watch() throws {
-        guard let rootURL = convertAction.rootURL else {
-            return
-        }
-
-        monitor = try DirectoryMonitor(root: rootURL) { _, _ in
-            self.print("Source bundle was modified, converting... ", terminator: "")
-            self.monitoredConvertTask?.cancel()
-            self.monitoredConvertTask = Task {
-                do {
-                    let result = try await self.convert()
-                    if result.didEncounterError {
-                        throw ErrorsEncountered()
-                    }
-                    self.print("Done.")
-
-                    // Notify connected browsers to reload
-                    LiveReloadClients.shared.notifyAll()
-                } catch DocumentationContext.ContextError.registrationDisabled {
-                    // The context cancelled loading the bundles and threw to yield execution early.
-                    self.print("\nConversion cancelled...")
-                } catch is CancellationError {
-                    self.print("\nConversion cancelled...")
-                } catch {
-                    self.print("\n\(error.localizedDescription)\nCompilation failed")
-                }
-            }
-        }
-        try monitor.start()
-        self.print("Monitoring \(rootURL.path) for changes...")
-    }
-}
-#endif // !os(Linux) && !os(Android)
-#endif // canImport(NIOHTTP1)
 
 extension DocumentationContext {
     

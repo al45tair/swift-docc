@@ -40,7 +40,7 @@ import SwiftDocC
 ///
 /// - Note: This class is thread-safe by using a naive locking for each access to the files dictionary.
 /// - Warning: Use this type for unit testing.
-package class TestFileSystem: FileManagerProtocol {
+package class TestFileSystem: FileManagerProtocol, @unchecked Sendable {
     package let currentDirectoryPath = "/"
         
     /// Thread safe access to the file system.
