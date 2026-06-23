@@ -87,6 +87,7 @@ let package = Package(
         // MicroHttpd library
         .target(
             name: "MicroHttpd",
+            exclude: ["CMakeLists.txt"],
             swiftSettings: swiftSettings(.v6)
         ),
         .testTarget(
@@ -208,7 +209,14 @@ let package = Package(
         // Zlib (used for .zip file handling)
         .systemLibrary(
             name: "CZLib",
-            pkgConfig: "zlib"
+            pkgConfig: "zlib",
+            providers: [
+                .apt(["zlib"]),
+                .brew(["zlib"]),
+                // Can't do this yet, because .nuget requires a newer PackageDescription version
+                //.nuget(["zlib_static"]),
+                .yum(["zlib"])
+            ]
         ),
         .target(
             name: "ZLib",

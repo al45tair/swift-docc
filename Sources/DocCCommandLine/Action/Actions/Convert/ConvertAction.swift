@@ -272,7 +272,7 @@ public struct ConvertAction: AsyncAction {
         let generateInFolder: URL
         let generateInFileManager: any FileManagerProtocol
         if outputFormat == .archive {
-            generateInFolder = URL(filePath: "/")!
+            generateInFolder = URL(filePath: "/")
             generateInFileManager = RamDiskFileManager()
 
             if let htmlTemplateDirectory {

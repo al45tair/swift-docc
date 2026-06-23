@@ -20,7 +20,7 @@ import Synchronization
         internal import Glibc
     #endif
 #elseif os(Windows)
-    internal import WinSDK
+    public import WinSDK
     internal import ucrt
 #else
     #error("You will need to add code for your platform")

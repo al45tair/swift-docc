@@ -10,6 +10,10 @@
 
 private import Foundation
 
+#if os(Windows)
+public import WinSDK
+#endif
+
 /// A handler that intercepts system signal-events.
 #if !os(Windows)
 public struct Signal {
@@ -38,6 +42,38 @@ public struct Signal {
                 sigaction(signal, pointer, nil)
             }
         }
+    }
+}
+#else
+public struct Signal {
+    /// List of all system events that interrupt the program execution.
+    public static let all: [DWORD] = [
+        DWORD(CTRL_C_EVENT),
+        DWORD(CTRL_BREAK_EVENT),
+        DWORD(CTRL_CLOSE_EVENT),
+        DWORD(CTRL_LOGOFF_EVENT),
+        DWORD(CTRL_SHUTDOWN_EVENT)
+    ]
+
+    private static var events: [DWORD] = []
+    private static var callback: ((DWORD) -> Void)? = nil
+    private static var installed: Bool = false
+
+    /// Intercepts the given list of events and invokes `callback` instead of interrupting execution.
+    public static func on(_ events: [DWORD], callback: @escaping (DWORD) -> Void) {
+       Signal.callback = callback
+       Signal.events = events
+
+       if !installed {
+            SetConsoleCtrlHandler({ (event: DWORD) -> WindowsBool in
+                if let callback = Signal.callback, Signal.events.contains(event) {
+                    callback(event)
+                    return true
+                }
+                return false
+            }, true)
+            installed = true
+       }
     }
 }
 #endif

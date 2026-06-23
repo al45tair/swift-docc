@@ -49,13 +49,14 @@ public import MicroHttpd
 
         init(path: String) throws {
             handle = CreateFile(
-                path: path,
-                dwDesiredAccess: DWORD(GENERIC_READ),
-                dwShareMode: DWORD(FILE_SHARE_READ),
-                lpSecurityAttributes: nil,
-                dwCreationDisposition: DWORD(OPEN_EXISTING),
-                dwFlagsAndAttributes: DWORD(FILE_FLAG_OVERLAPPED),
-                hTemplateFile: nil)
+                path,
+                DWORD(GENERIC_READ),
+                DWORD(FILE_SHARE_READ),
+                nil,
+                DWORD(OPEN_EXISTING),
+                DWORD(FILE_FLAG_OVERLAPPED),
+                nil
+            )
             if handle == INVALID_HANDLE_VALUE {
                 let error = GetLastError()
                 throw MicroHttpdError.win32Error(error: error)
@@ -73,7 +74,7 @@ public import MicroHttpd
         }
 
         func read(from offset: Int, into span: inout OutputRawSpan) throws {
-            span.withUnsafeMutableBytes { (bytes, count: inout Int) -> Void in
+            try span.withUnsafeMutableBytes { (bytes, count: inout Int) -> Void in
                 var dwRead: DWORD = 0
                 var ovl = OVERLAPPED()
                 ovl.Offset = DWORD(truncatingIfNeeded: offset)
@@ -104,7 +105,6 @@ public import MicroHttpd
         func close() throws {
             if handle != INVALID_HANDLE_VALUE {
                 CloseHandle(handle)
-                handle = INVALID_HANDLE_VALUE
             }
         }
     }

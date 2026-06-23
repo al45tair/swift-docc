@@ -9,15 +9,15 @@
 */
 
 #if os(anyAppleOS)
-    internal import Darwin
+    public import Darwin
 #elseif os(Linux)
     #if canImport(Musl)
-        internal import Musl
+        public import Musl
     #else
-        internal import Glibc
+        public import Glibc
     #endif
 #elseif os(Windows)
-    internal import WinSDK
+    public import WinSDK
 #else
     #error("You will need to add code for your platform")
 #endif
