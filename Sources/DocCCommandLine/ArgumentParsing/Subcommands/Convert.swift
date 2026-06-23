@@ -85,8 +85,13 @@ extension Docc {
             }
             
             /// The format that the convert action will output the documentation in when writing to the specific output location.
+            #if os(Windows)
+            @Option(name: .long, help: "The output format to use.")
+            var outputFormat: OutputFormat = .archive
+            #else
             @Option(name: .long, help: "The output format to use.")
             var outputFormat: OutputFormat = .json
+            #endif
         }
         
         /// The path to the directory that all build output should be placed in.
