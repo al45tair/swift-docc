@@ -50,15 +50,7 @@ add_library(DocCCommandLine STATIC
   ArgumentParsing/Subcommands/ProcessCatalog.swift
   ArgumentParsing/Subcommands/TransformForStaticHosting.swift
   Docc.swift
-  PreviewServer/LiveReloadClients.swift
-  PreviewServer/PreviewHTTPHandler.swift
-  PreviewServer/PreviewServer.swift
-  PreviewServer/RequestHandler/DefaultRequestHandler.swift
-  PreviewServer/RequestHandler/ErrorRequestHandler.swift
-  PreviewServer/RequestHandler/FileRequestHandler.swift
-  PreviewServer/RequestHandler/HTTPResponseHead+FromRequest.swift
-  PreviewServer/RequestHandler/RequestHandlerFactory.swift
-  PreviewServer/RequestHandler/SSERequestHandler.swift
+  PreviewServer/PreviewRequestHandler.swift
   Transformers/StaticHostableTransformer.swift
   Utility/DirectoryMonitor.swift
   Utility/FoundationExtensions/Sequence+Unique.swift

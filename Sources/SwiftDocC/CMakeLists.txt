@@ -408,6 +408,7 @@ add_library(SwiftDocC
   Utility/Collection+ConcurrentPerform.swift
   Utility/CollectionChanges.swift
   Utility/CommonTypeExports.swift
+  Utility/Date+DosFileTime.swift
   Utility/DataStructures/BidirectionalMap.swift
   Utility/DataStructures/GroupedSequence.swift
   Utility/DispatchGroup+Async.swift
@@ -464,22 +465,29 @@ add_library(SwiftDocC
   Utility/MarkupExtensions/MarkupChildrenExtensions.swift
   Utility/MarkupExtensions/SourceRangeExtensions.swift
   Utility/NearMiss.swift
+  Utility/RamDiskFileManager.swift
   Utility/RenderNodeDataExtractor.swift
   Utility/SemanticVersion+Comparable.swift
   Utility/SymbolGraphAvailability+Filter.swift
   Utility/Synchronization.swift
   Utility/ValidatedURL.swift
-  Utility/Version.swift)
+  Utility/Version.swift
+  Utility/ZipFileDataSink.swift
+  Utility/ZipFileDataSource.swift
+  Utility/ZipFileReader+ReadOnlyFileManagerProtocol.swift
+  Utility/ZipFileReader.swift
+  Utility/ZipFileRequestHandler.swift
+  Utility/ZipFileWriter.swift
+  )
 target_link_libraries(SwiftDocC PRIVATE
-  DocCCommon)
-target_link_libraries(SwiftDocC PRIVATE
-  DocCHTML)
+  DocCCommon
+  DocCHTML
+  ZLib)
 target_link_libraries(SwiftDocC PUBLIC
   SwiftMarkdown::Markdown
   DocC::SymbolKit
   LMDB::CLMDB
-  Crypto
-  ZLIB::ZLIB)
+  Crypto)
 # FIXME(compnerd) workaround leaking dependencies
 target_link_libraries(SwiftDocC PUBLIC
   libcmark-gfm
