@@ -2938,7 +2938,8 @@ class ConvertActionTests: XCTestCase {
             currentPlatforms: nil,
             fileManager: fileSystem,
             temporaryDirectory: fileSystem.uniqueTemporaryDirectory(),
-            outputFormat: .archive
+            outputFormat: .json,
+            compress: true
         )
         
         let result = try await action.perform(logHandle: .none)

@@ -19,6 +19,7 @@ struct MergeAction: AsyncAction {
     var landingPageInfo: LandingPageInfo
     var outputURL: URL
     var outputFormat: Docc.Merge.OutputFormat
+    var compress: Bool
     var fileManager: any FileManagerProtocol
 
     /// Information about how the merge action should create landing page content for the combined archive
@@ -68,15 +69,14 @@ struct MergeAction: AsyncAction {
         let generateInFileManager: any FileManagerProtocol
         let temporaryFolder: URL?
         let targetURL: URL
-        switch outputFormat {
-            case .json:
-                targetURL = try Self.createUniqueDirectory(inside: fileManager.uniqueTemporaryDirectory(), template: nil, fileManager: fileManager)
-                generateInFileManager = fileManager
-                temporaryFolder = targetURL
-            case .archive:
-                temporaryFolder = nil
-                generateInFileManager = RamDiskFileManager()
-                targetURL = URL(filePath: "/")
+        if compress {
+            temporaryFolder = nil
+            generateInFileManager = RamDiskFileManager()
+            targetURL = URL(filePath: "/")
+        } else {
+            temporaryFolder = try Self.createUniqueDirectory(inside: fileManager.uniqueTemporaryDirectory(), template: nil, fileManager: fileManager)
+            generateInFileManager = fileManager
+            targetURL = temporaryFolder!
         }
 
         defer {
@@ -145,7 +145,7 @@ struct MergeAction: AsyncAction {
         
         try generateInFileManager.createFile(at: jsonIndexURL, contents: RenderJSONEncoder.makeEncoder(emitVariantOverrides: false).encode(combinedJSONIndex))
         
-        if outputFormat == .archive {
+        if compress {
             let ramdisk = generateInFileManager as! RamDiskFileManager
             try fileManager.createFile(at: outputURL, contents: ramdisk.generateZippedData())
         } else {
@@ -257,26 +257,26 @@ struct MergeAction: AsyncAction {
     
     /// Validate that the output directory is empty.
     private func validateThatOutputIsEmpty() throws {
-        switch outputFormat {
-            case .json:
-                guard fileManager.directoryExists(atPath: outputURL.path) else {
-                    return
-                }
-            case .archive:
-                var isDirectory: ObjCBool = false
-                if fileManager.fileExists(atPath: outputURL.path, isDirectory: &isDirectory) {
-                    struct FileAlreadyExists: DescribedError {
-                        var errorDescription: String {
-                            return """
-                            A file or directory already exists at the output path.
-                            """
-                        }
+        if compress {
+            var isDirectory: ObjCBool = false
+            if fileManager.fileExists(atPath: outputURL.path, isDirectory: &isDirectory) {
+                struct FileAlreadyExists: DescribedError {
+                    var errorDescription: String {
+                        return """
+                        A file or directory already exists at the output path.
+                        """
                     }
-
-                    throw FileAlreadyExists()
                 }
+
+                throw FileAlreadyExists()
+            }
+            return
         }
-        
+
+        guard fileManager.directoryExists(atPath: outputURL.path) else {
+            return
+        }
+
         let existingContents = (try? fileManager.contentsOfDirectory(at: outputURL, includingPropertiesForKeys: nil, options: .skipsHiddenFiles)) ?? []
         guard existingContents.isEmpty else {
             struct NonEmptyOutputError: DescribedError {

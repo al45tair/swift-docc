@@ -29,6 +29,7 @@ public struct ConvertAction: AsyncAction {
     
     private let emitDigest: Bool
     private let outputFormat: Docc.Convert.OutputFormat
+    private let compress: Bool
     let treatWarningsAsErrors: Bool
     let experimentalEnableCustomTemplates: Bool
     private let experimentalModifyCatalogWithGeneratedCuration: Bool
@@ -64,6 +65,7 @@ public struct ConvertAction: AsyncAction {
     ///     A JSON representation is built and emitted regardless of this value.
     ///   - fileManager: The file manager that the convert action uses to create directories and write data to files.
     ///   - outputFormat: The format that the convert action will output the documentation in when writing to the output location.
+    ///   - compress: Whether to compress the output into a zip archive.
     ///   - documentationCoverageOptions: Indicates whether or not to generate coverage output and at what level.
     ///   - bundleDiscoveryOptions: Options to configure how the converter discovers documentation bundles.
     ///   - diagnosticLevel: The level above which diagnostics will be filtered out. This filter level is inclusive, i.e. if a level of `DiagnosticSeverity.information` is specified, diagnostics with a severity up to and including `.information` will be printed.
@@ -96,6 +98,7 @@ public struct ConvertAction: AsyncAction {
         fileManager: any FileManagerProtocol = FileManager.default,
         temporaryDirectory: URL,
         outputFormat: Docc.Convert.OutputFormat = .json,
+        compress: Bool = false,
         outputFileManager: (any FileManagerProtocol)? = nil,
         documentationCoverageOptions: DocumentationCoverageOptions = .noCoverage,
         bundleDiscoveryOptions: BundleDiscoveryOptions = .init(),
@@ -122,6 +125,7 @@ public struct ConvertAction: AsyncAction {
         self.htmlTemplateDirectory = htmlTemplateDirectory
         self.emitDigest = emitDigest
         self.outputFormat = outputFormat
+        self.compress = compress
         self.buildLMDBIndex = buildIndex
         self.fileManager = fileManager
         self.outputFileManager = outputFileManager ?? fileManager
@@ -225,30 +229,11 @@ public struct ConvertAction: AsyncAction {
     
     func perform(logHandle: inout LogHandle) async throws -> (ActionResult, DocumentationContext) {
         // FIXME: Use `defer` again when the asynchronous defer-statement miscompilation (rdar://137774949) is fixed.
-        let temporaryFolder: URL
-        switch outputFormat {
-        case .json:
-            temporaryFolder = try Self.createUniqueDirectory(
-                inside: temporaryDirectory,
-                template: htmlTemplateDirectory,
-                fileManager: outputFileManager
-            )
-        case .experimentalHTML:
-            temporaryFolder = try Self.createUniqueDirectory(
-                inside: temporaryDirectory,
-                template: nil,
-                fileManager: outputFileManager
-            )
-            for file in DocCHTML.StaticResources.allFiles {
-                try outputFileManager.createFile(at: temporaryFolder.appendingPathComponent(file.filename), contents: file.data)
-            }
-        case .archive:
-            temporaryFolder = try Self.createUniqueDirectory(
-                inside: temporaryDirectory,
-                template: nil,
-                fileManager: outputFileManager
-            )
-        }
+        let temporaryFolder = try Self.createUniqueDirectory(
+            inside: temporaryDirectory,
+            template: nil,
+            fileManager: outputFileManager
+        )
         
         do {
             let result = try await _perform(logHandle: &logHandle, temporaryFolder: temporaryFolder)
@@ -271,20 +256,29 @@ public struct ConvertAction: AsyncAction {
         
         let generateInFolder: URL
         let generateInFileManager: any FileManagerProtocol
-        if outputFormat == .archive {
+
+        if compress {
             generateInFolder = URL(filePath: "/")
             generateInFileManager = RamDiskFileManager()
-
-            if let htmlTemplateDirectory {
-                try fileManager.copyItem(
-                    at: htmlTemplateDirectory,
-                    to: generateInFolder,
-                    on: generateInFileManager
-                )
-            }
         } else {
             generateInFolder = temporaryFolder
             generateInFileManager = outputFileManager
+        }
+
+        // Populate the directory with the initial files
+        switch outputFormat {
+            case .json:
+                if let htmlTemplateDirectory {
+                    try fileManager.copyItem(
+                        at: htmlTemplateDirectory,
+                        to: generateInFolder,
+                        on: generateInFileManager
+                    )
+                }
+            case .experimentalHTML:
+                for file in DocCHTML.StaticResources.allFiles {
+                    try generateInFileManager.createFile(at: generateInFolder.appendingPathComponent(file.filename), contents: file.data)
+                }
         }
 
         // Add the default diagnostic console writer now that we know what log handle it should write to.
@@ -319,7 +313,7 @@ public struct ConvertAction: AsyncAction {
 //        }
 
         let indexHTML: URL?
-        if let htmlTemplateDirectory, outputFormat == .json || outputFormat == .archive {
+        if let htmlTemplateDirectory, outputFormat == .json {
             let indexHTMLUrl = generateInFolder.appendingPathComponent(
                 HTMLTemplate.indexFileName.rawValue,
                 isDirectory: false
@@ -482,9 +476,9 @@ public struct ConvertAction: AsyncAction {
         // However, if the `emitDigest` flag is true, we should replace the current output with our digest of diagnostics.
         // FIXME: We no longer output a diagnostics file in the output. We can remove the `emitDigest` check below.
         if !didEncounterError || emitDigest {
-            if outputFormat == .archive {
+            if compress {
                 try signposter.withIntervalSignpost("Compress data") {
-                    // In archive mode, we have all of the files now in the ramdisk; generate zip output.
+                    // In compress mode, we have all of the files now in the ramdisk; generate zip output.
                     let ramdisk = generateInFileManager as! RamDiskFileManager
 
                     var isDir: ObjCBool = false
@@ -533,8 +527,8 @@ public struct ConvertAction: AsyncAction {
         if Benchmark.main.isEnabled {
             // Write the benchmark files directly in the target directory.
             let targetFolder: URL
-            if outputFormat == .archive {
-                // or alongside it if the output format is set to archive
+            if compress {
+                // or alongside it if the output format is compress
                 targetFolder = targetURL.deletingLastPathComponent()
             } else {
                 targetFolder = targetURL

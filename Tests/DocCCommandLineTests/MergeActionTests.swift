@@ -71,6 +71,7 @@ class MergeActionTests: XCTestCase {
             landingPageInfo: testLandingPageInfo,
             outputURL: URL(fileURLWithPath: "/Output.doccarchive"),
             outputFormat: .json,
+            compress: false,
             fileManager: fileSystem
         )
         
@@ -200,6 +201,7 @@ class MergeActionTests: XCTestCase {
             landingPageInfo: testLandingPageInfo,
             outputURL: URL(fileURLWithPath: "/Output.doccarchive"),
             outputFormat: .json,
+            compress: false,
             fileManager: fileSystem
         )
         
@@ -292,6 +294,7 @@ class MergeActionTests: XCTestCase {
             landingPageInfo: testLandingPageInfo,
             outputURL: URL(fileURLWithPath: "/Output.doccarchive"),
             outputFormat: .json,
+            compress: false,
             fileManager: fileSystem
         )
         
@@ -414,6 +417,7 @@ class MergeActionTests: XCTestCase {
             landingPageInfo: testLandingPageInfo,
             outputURL: URL(fileURLWithPath: "/Output.doccarchive"),
             outputFormat: .json,
+            compress: false,
             fileManager: fileSystem
         )
         
@@ -530,6 +534,7 @@ class MergeActionTests: XCTestCase {
             landingPageInfo: testLandingPageInfo,
             outputURL: URL(fileURLWithPath: "/Output.doccarchive"),
             outputFormat: .json,
+            compress: false,
             fileManager: fileSystem
         )
         
@@ -645,6 +650,7 @@ class MergeActionTests: XCTestCase {
             landingPageInfo: testLandingPageInfo,
             outputURL: URL(fileURLWithPath: "/Output.doccarchive"),
             outputFormat: .json,
+            compress: false,
             fileManager: fileSystem
         )
         
@@ -691,6 +697,7 @@ class MergeActionTests: XCTestCase {
             landingPageInfo: testLandingPageInfo,
             outputURL: URL(fileURLWithPath: "/Output.doccarchive"),
             outputFormat: .json,
+            compress: false,
             fileManager: fileSystem
         )
 
@@ -772,6 +779,7 @@ class MergeActionTests: XCTestCase {
             landingPageInfo: testLandingPageInfo,
             outputURL: URL(fileURLWithPath: "/Output.doccarchive"),
             outputFormat: .json,
+            compress: false,
             fileManager: fileSystem
         )
         
@@ -814,6 +822,7 @@ class MergeActionTests: XCTestCase {
             landingPageInfo: testLandingPageInfo,
             outputURL: URL(fileURLWithPath: "/Output.doccarchive"),
             outputFormat: .json,
+            compress: false,
             fileManager: fileSystem
         )
         
@@ -880,6 +889,7 @@ class MergeActionTests: XCTestCase {
             landingPageInfo: testLandingPageInfo,
             outputURL: URL(fileURLWithPath: "/Output.doccarchive"),
             outputFormat: .json,
+            compress: false,
             fileManager: fileSystem
         )
         
@@ -997,6 +1007,7 @@ class MergeActionTests: XCTestCase {
             landingPageInfo: testLandingPageInfo,
             outputURL: combinedArchiveDir,
             outputFormat: .json,
+            compress: false,
             fileManager: fileSystem
         )
         
@@ -1145,6 +1156,7 @@ class MergeActionTests: XCTestCase {
             landingPageInfo: testLandingPageInfo,
             outputURL: URL(fileURLWithPath: "/Output.doccarchive"),
             outputFormat: .json,
+            compress: false,
             fileManager: fileSystem
         )
         
@@ -1296,7 +1308,8 @@ class MergeActionTests: XCTestCase {
             ],
             landingPageInfo: testLandingPageInfo,
             outputURL: URL(fileURLWithPath: "/Output.doccarchive"),
-            outputFormat: .archive,
+            outputFormat: .json,
+            compress: true,
             fileManager: fileSystem
         )
         

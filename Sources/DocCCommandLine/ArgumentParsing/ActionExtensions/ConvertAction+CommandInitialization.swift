@@ -70,6 +70,7 @@ extension ConvertAction {
             buildIndex: convert.featureFlags.emitLMDBIndex,
             temporaryDirectory: FileManager.default.temporaryDirectory,
             outputFormat: convert.inputsAndOutputs.outputFormat,
+            compress: convert.inputsAndOutputs.compress,
             documentationCoverageOptions: DocumentationCoverageOptions(
                 from: convert.experimentalDocumentationCoverageOptions
             ),

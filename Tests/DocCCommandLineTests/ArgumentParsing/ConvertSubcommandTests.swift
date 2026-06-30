@@ -27,9 +27,9 @@ class ConvertSubcommandTests: XCTestCase {
         // by the machine environment.
         let priorWorkingDirectory = FileManager.default.currentDirectoryPath
         let temporaryDirectory = try createTemporaryDirectory()
-        FileManager.default.changeCurrentDirectoryPath(temporaryDirectory.path)
+        _ = FileManager.default.changeCurrentDirectoryPath(temporaryDirectory.path)
         addTeardownBlock {
-            FileManager.default.changeCurrentDirectoryPath(priorWorkingDirectory)
+            _ = FileManager.default.changeCurrentDirectoryPath(priorWorkingDirectory)
         }
 
         // By default, send all warnings to `.none` instead of filling the
@@ -629,10 +629,6 @@ class ConvertSubcommandFlagParsingTests {
         let redundantJSONOutput = try Docc.Convert.parse(["--output-format", "json"])
         #expect(redundantJSONOutput.inputsAndOutputs.outputFormat == .json)
         
-        // We also support "archive", which builds a zipped version of the JSON output
-        let zippedOutput = try Docc.Convert.parse(["--output-format", "archive"])
-        #expect(zippedOutput.inputsAndOutputs.outputFormat == .archive)
-
         // At this stage, the static HTML output format is spelled very verbosely and explicitly to dissuade general usage (in addition to the option is hidden)
         let htmlOutput = try Docc.Convert.parse(["--output-format", "experimental-html-for-development"])
         #expect(htmlOutput.inputsAndOutputs.outputFormat == .experimentalHTML)
@@ -644,6 +640,15 @@ class ConvertSubcommandFlagParsingTests {
         #expect(throws: (any Error).self) {
             try Docc.Convert.parse(["--output-format", "html"])
         }
+    }
+
+    @Test
+    func parsingCompressed() throws {
+        let compressed = try Docc.Convert.parse(["--compress"])
+        #expect(compressed.inputsAndOutputs.compress == true)
+
+        let notCompressed = try Docc.Convert.parse(["--no-compress"])
+        #expect(notCompressed.inputsAndOutputs.compress == false)
     }
     
     // This test calls ``ConvertOptions.infoPlistFallbacks._unusedVersionForBackwardsCompatibility`` which is deprecated.

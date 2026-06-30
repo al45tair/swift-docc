@@ -29,12 +29,7 @@
 #endif
 
 // These are just for testing, so we can run the tests on every platform
-#if os(Windows)
-    public struct timespec {
-        var tv_sec: CLong
-        var tv_nsec: CLong
-    }
-#else
+#if !os(Windows)
     public struct FILETIME {
         var dwLowDateTime: UInt32
         var dwHighDateTime: UInt32

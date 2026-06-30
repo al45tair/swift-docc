@@ -85,12 +85,15 @@ extension Docc {
             }
             
             /// The format that the convert action will output the documentation in when writing to the specific output location.
-            #if os(Windows)
-            @Option(name: .long, help: "The output format to use.")
-            var outputFormat: OutputFormat = .archive
-            #else
-            @Option(name: .long, help: "The output format to use.")
+            @Option(name: .long, help: .hidden)
             var outputFormat: OutputFormat = .json
+
+            #if os(Windows)
+            @Flag(name: .long, inversion: .prefixedNo, help: "Compress the output.")
+            var compress: Bool = true
+            #else
+            @Flag(name: .long, inversion: .prefixedNo, help: "Compress the output.")
+            var compress: Bool = false
             #endif
         }
         
@@ -629,8 +632,6 @@ extension Docc {
             case json
             /// Output each page as a static HTML file.
             case experimentalHTML
-            /// Output a zip file containing JSON files
-            case archive
 
             package init?(argument: String) {
                 switch argument {
@@ -641,15 +642,13 @@ extension Docc {
                     // the plan is to rename this to only "experimental-html" and post a pitch about the broader feature to the Swift Forums.
                     case "experimental-html-for-development":
                         self = .experimentalHTML
-                    
-                    case "archive": self = .archive
 
                     default: return nil
                 }
             }
             
             package static var allValueStrings: [String] {
-                ["archive", "json", "experimental-html-for-development"]
+                ["json", "experimental-html-for-development"]
             }
         }
     }

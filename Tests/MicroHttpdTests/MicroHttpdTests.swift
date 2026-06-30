@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import Testing
 
 @testable import MicroHttpd
@@ -77,7 +80,7 @@ struct HtmlHelloHandler2: RequestHandler {
     let session = URLSession(configuration: .default)
     let request = URLRequest(url: URL(string: "http://localhost:8081/")!)
 
-    let (_, response) = try! await session.bytes(for: request)
+    let (_, response) = try! await session.data(for: request)
     guard let httpResponse = response as? HTTPURLResponse else {
         fatalError("response should be an httpResponse")
     }

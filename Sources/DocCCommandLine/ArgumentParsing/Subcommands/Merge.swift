@@ -67,8 +67,16 @@ extension Docc {
             var outputURL: URL!
             
             /// The format that the convert action will output the documentation in when writing to the specific output location.
-            @Option(name: .long, help: "The output format to use.")
+            @Option(name: .long, help: .hidden)
             var outputFormat: OutputFormat = .json
+
+            #if os(Windows)
+            @Flag(name: .long, inversion: .prefixedNo, help: "Compress the output.")
+            var compress: Bool = true
+            #else
+            @Flag(name: .long, inversion: .prefixedNo, help: "Compress the output.")
+            var compress: Bool = false
+            #endif
 
             mutating func validate() throws {
                 let fileManager = Docc.Merge._fileManager
@@ -154,21 +162,17 @@ extension Docc {
         package enum OutputFormat: ExpressibleByArgument {
             /// Output each page as a JSON file---in the format described in RenderNode.spec.json---to be consumed by Swift-DocC Render.
             case json
-            /// Output a zip file containing JSON files
-            case archive
 
             package init?(argument: String) {
                 switch argument {
                     case "json": self = .json
                     
-                    case "archive": self = .archive
-
                     default: return nil
                 }
             }
             
             package static var allValueStrings: [String] {
-                ["archive", "json"]
+                ["json"]
             }
         }
 
@@ -185,6 +189,7 @@ extension Docc {
                 ),
                 outputURL: inputsAndOutputs.outputURL,
                 outputFormat: inputsAndOutputs.outputFormat,
+                compress: inputsAndOutputs.compress,
                 fileManager: Self._fileManager
             )
             
