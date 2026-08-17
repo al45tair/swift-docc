@@ -130,8 +130,7 @@ struct FileWritingHTMLContentConsumer: HTMLContentConsumer {
         self.prettyPrintOutput = prettyPrintOutput
         self.fileWriter = JSONEncodingRenderNodeWriter(
             targetFolder: targetFolder,
-            fileManager: fileManager,
-            outputFileManager: outputFileManager,
+            fileManager: outputFileManager,
             transformForStaticHostingIndexHTML: nil
         )
     }

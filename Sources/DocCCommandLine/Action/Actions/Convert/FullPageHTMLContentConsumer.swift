@@ -45,8 +45,7 @@ struct FullPageHTMLContentConsumer: HTMLContentConsumer {
         
         self.fileWriter = JSONEncodingRenderNodeWriter(
             targetFolder: targetFolder,
-            fileManager: fileManager,
-            outputFileManager: outputFileManager,
+            fileManager: outputFileManager,
             transformForStaticHostingIndexHTML: nil
         )
     }
