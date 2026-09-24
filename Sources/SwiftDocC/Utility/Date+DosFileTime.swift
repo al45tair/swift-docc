@@ -15,7 +15,7 @@ extension Date {
         let year = 1980 + Int((dosFileTime >> 25) & 0x7f)
         let month = Int((dosFileTime >> 21) & 0xf)
         let day = Int((dosFileTime >> 16) & 0x1f)
-        let hour = Int((dosFileTime >> 11) & 0xf)
+        let hour = Int((dosFileTime >> 11) & 0x1f)
         let minute = Int((dosFileTime >> 5) & 0x3f)
         let second = Int((dosFileTime << 1) & 0x3f)
 

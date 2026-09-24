@@ -11,50 +11,6 @@
 public import Foundation
 internal import ZLib
 
-enum ZipFileError: Error, DescribedError {
-    case noCentralDirectory
-    case readOffEndOfSource
-    case spannedArchivesNotSupported
-    case badDirectoryEntry(at: Int)
-    case badPathInDirectory(String)
-    case duplicateEntry(String)
-    case fileNotFound(String)
-    case itemIsADirectory(String)
-    case itemIsNotADirectory(String)
-    case unsupportedCompression(String)
-    case badLocalHeader(for: String)
-    case unsupportedVersion(UInt16)
-
-    var errorDescription: String {
-        switch self {
-            case .noCentralDirectory: 
-                "Zip file central directory missing"
-            case .readOffEndOfSource: 
-                "Attempt to read off end of zip file"
-            case .spannedArchivesNotSupported: 
-                "Spanned zip archives are not supported"
-            case .badDirectoryEntry(let ndx): 
-                "Bad zip directory entry at \(ndx)"
-            case .badPathInDirectory(let path): 
-                "Bad path in zip directory: \"\(path)\""
-            case .duplicateEntry(let path):
-                "Duplicate entry in zip directory: \"\(path)\""
-            case .fileNotFound(let path):
-                "File not found in zip: \"\(path)\""
-            case .itemIsADirectory(let path):
-                "Item in zip at path \"\(path)\" is a directory"
-            case .itemIsNotADirectory(let path):
-                "Item in zip at path \"\(path)\" is not a directory"
-            case .unsupportedCompression(let path):
-                "Unsupported compression for item in zip with path \"\(path)\""
-            case .badLocalHeader(for: let path):
-                "Bad local header in zip for \"\(path)\""
-            case .unsupportedVersion(let version):
-                "Unsupported zip version \(version)"
-        }
-    }
-}
-
 public protocol ZipFileSource {
     /// The length of the source
     var length: Int { get }
@@ -200,7 +156,7 @@ public class ZipFileReader<S: ZipFileSource>: @unchecked Sendable {
         }
 
         var pos = toRead - 22
-        while pos > 0 {
+        while pos >= 0 {
             let ch = span.bytes.unsafeLoad(fromByteOffset: pos, as: UInt8.self)
             switch ch {
             case 0x50:  // 'P'
@@ -223,6 +179,41 @@ public class ZipFileReader<S: ZipFileSource>: @unchecked Sendable {
         }
 
         return nil
+    }
+
+    // If a Zip64 End of Central Directory Locator immediately precedes the
+    // standard EOCD record, it points to a Zip64 End of Central Directory
+    // Record whose 64-bit central directory size/offset unconditionally
+    // replace the standard EOCD's own (possibly-sentineled) 32-bit values.
+    func resolveZip64EndOfCentralDirectory(
+        eocdOffset: Int, cdSize: Int, cdOffset: Int
+    ) throws -> (offset: Int, size: Int) {
+        guard eocdOffset >= 20 else {
+            return (cdOffset, cdSize)
+        }
+
+        let locatorOffset = eocdOffset - 20
+        let locatorSignature = try source.read(from: locatorOffset, as: UInt32.self)
+        if locatorSignature != 0x0706_4b50 /* PK<06><07> */ {
+            return (cdOffset, cdSize)
+        }
+
+        let zip64EocdOffset = Int(try source.read(from: locatorOffset + 8, as: UInt64.self))
+
+        let zip64Signature = try source.read(from: zip64EocdOffset, as: UInt32.self)
+        if zip64Signature != 0x0606_4b50 /* PK<06><06> */ {
+            throw ZipFileError.badZip64Record(at: zip64EocdOffset)
+        }
+
+        let sizeOfRemainingRecord = try source.read(from: zip64EocdOffset + 4, as: UInt64.self)
+        if sizeOfRemainingRecord < 44 {
+            throw ZipFileError.badZip64Record(at: zip64EocdOffset)
+        }
+
+        let zip64CdSize = Int(try source.read(from: zip64EocdOffset + 40, as: UInt64.self))
+        let zip64CdOffset = Int(try source.read(from: zip64EocdOffset + 48, as: UInt64.self))
+
+        return (zip64CdOffset, zip64CdSize)
     }
 
     func readDirectory() throws {
@@ -248,6 +239,9 @@ public class ZipFileReader<S: ZipFileSource>: @unchecked Sendable {
         let cdSize = Int(try source.read(from: eocdOffset + 12, as: UInt32.self))
         let cdOffset = Int(try source.read(from: eocdOffset + 16, as: UInt32.self))
 
+        let resolvedDirectory = try resolveZip64EndOfCentralDirectory(
+            eocdOffset: eocdOffset, cdSize: cdSize, cdOffset: cdOffset)
+
         let commentLength = try source.read(from: eocdOffset + 20, as: UInt16.self)
 
         if commentLength > 0 {
@@ -257,8 +251,8 @@ public class ZipFileReader<S: ZipFileSource>: @unchecked Sendable {
         }
 
         // Now read the central directory
-        var pos = cdOffset
-        while pos < cdOffset + cdSize {
+        var pos = resolvedDirectory.offset
+        while pos < resolvedDirectory.offset + resolvedDirectory.size {
             let entryPos = pos
             let signature = try source.read(from: pos, as: UInt32.self)
             if signature != 0x0201_4b50 /* PK<01><02> */ {
@@ -276,16 +270,35 @@ public class ZipFileReader<S: ZipFileSource>: @unchecked Sendable {
             let compression = try source.read(from: pos + 10, as: UInt16.self)
             let dosFileTime = try source.read(from: pos + 12, as: UInt32.self)
             let crc32 = try source.read(from: pos + 16, as: UInt32.self)
-            let compressedSize = try source.read(from: pos + 20, as: UInt32.self)
-            let uncompressedSize = try source.read(from: pos + 24, as: UInt32.self)
+            let compressedSize32 = try source.read(from: pos + 20, as: UInt32.self)
+            let uncompressedSize32 = try source.read(from: pos + 24, as: UInt32.self)
             let nameLength = Int(try source.read(from: pos + 28, as: UInt16.self))
             let extraLength = Int(try source.read(from: pos + 30, as: UInt16.self))
             let commentLength = Int(try source.read(from: pos + 32, as: UInt16.self))
-            //let startDisk = try source.read(from: pos + 34, as: UInt16.self)
+            let diskNumberStart = try source.read(from: pos + 34, as: UInt16.self)
             //let internalAttrs = try source.read(from: pos + 36, as: UInt16.self)
             //let externalAttrs = try source.read(from: pos + 38, as: UInt32.self)
-            let localHeaderOffset = try source.read(from: pos + 42, as: UInt32.self)
+            let localHeaderOffset32 = try source.read(from: pos + 42, as: UInt32.self)
             var timestamp: Date = Date(dosFileTime: dosFileTime)
+
+            // Zip64: each of these fields can independently be sentineled to
+            // 0xFFFFFFFF/0xFFFF, with the real 64-bit value recovered below
+            // from a 0x0001 extra field. Disk start isn't otherwise used
+            // (spanned archives aren't supported), but must still be
+            // consulted to know whether the extra field's fixed-order
+            // subfields include it.
+            let needsZip64UncompressedSize = uncompressedSize32 == 0xFFFF_FFFF
+            let needsZip64CompressedSize = compressedSize32 == 0xFFFF_FFFF
+            let needsZip64HeaderOffset = localHeaderOffset32 == 0xFFFF_FFFF
+            let needsZip64DiskStart = diskNumberStart == 0xFFFF
+
+            var resolvedUncompressedSize = Int(uncompressedSize32)
+            var resolvedCompressedSize = Int(compressedSize32)
+            var resolvedHeaderOffset = Int(localHeaderOffset32)
+
+            var foundZip64UncompressedSize = false
+            var foundZip64CompressedSize = false
+            var foundZip64HeaderOffset = false
 
             pos += 46
 
@@ -300,12 +313,58 @@ public class ZipFileReader<S: ZipFileSource>: @unchecked Sendable {
 
                 // UT - Extended Timestamp
                 if tag == 0x5455 && size >= 5 {
-                    let flags = try source.read(from: pos + 3, as: UInt8.self)
+                    let flags = try source.read(from: pos + 4, as: UInt8.self)
                     if (flags & 1) != 0 {
-                        let unixTimestamp = try source.read(from: pos + 4, as: Int32.self)
+                        let unixTimestamp = try source.read(from: pos + 5, as: Int32.self)
                         timestamp = Date(
                             timeIntervalSince1970:
                                 TimeInterval(unixTimestamp))
+                    }
+                }
+
+                // Zip64 Extended Information Extra Field. Subfields appear,
+                // in this fixed order, only for the standard fields that
+                // were sentineled above.
+                if tag == 0x0001 {
+                    var subPos = pos + 4
+                    let subEnd = pos + 4 + size
+
+                    if needsZip64UncompressedSize {
+                        guard subPos + 8 <= subEnd else {
+                            throw ZipFileError.badDirectoryEntry(at: entryPos)
+                        }
+                        resolvedUncompressedSize = Int(try source.read(from: subPos, as: UInt64.self))
+                        foundZip64UncompressedSize = true
+                        subPos += 8
+                    }
+                    if needsZip64CompressedSize {
+                        guard subPos + 8 <= subEnd else {
+                            throw ZipFileError.badDirectoryEntry(at: entryPos)
+                        }
+                        resolvedCompressedSize = Int(try source.read(from: subPos, as: UInt64.self))
+                        foundZip64CompressedSize = true
+                        subPos += 8
+                    }
+                    if needsZip64HeaderOffset {
+                        guard subPos + 8 <= subEnd else {
+                            throw ZipFileError.badDirectoryEntry(at: entryPos)
+                        }
+                        resolvedHeaderOffset = Int(try source.read(from: subPos, as: UInt64.self))
+                        foundZip64HeaderOffset = true
+                        subPos += 8
+                    }
+                    if needsZip64DiskStart {
+                        guard subPos + 4 <= subEnd else {
+                            throw ZipFileError.badDirectoryEntry(at: entryPos)
+                        }
+                        // Spanned archives aren't supported, so the value
+                        // itself is unused, but it must still be consumed to
+                        // keep the fixed-order block fully accounted for.
+                        subPos += 4
+                    }
+
+                    if subPos != subEnd {
+                        throw ZipFileError.badDirectoryEntry(at: entryPos)
                     }
                 }
 
@@ -313,6 +372,16 @@ public class ZipFileReader<S: ZipFileSource>: @unchecked Sendable {
                     throw ZipFileError.badDirectoryEntry(at: entryPos)
                 }
                 pos += size + 4
+            }
+
+            // Every sentineled field must have actually been resolved by a
+            // 0x0001 block; a sentinel with no matching Zip64 extra field is
+            // a malformed entry.
+            if (needsZip64UncompressedSize && !foundZip64UncompressedSize)
+                || (needsZip64CompressedSize && !foundZip64CompressedSize)
+                || (needsZip64HeaderOffset && !foundZip64HeaderOffset)
+            {
+                throw ZipFileError.badDirectoryEntry(at: entryPos)
             }
 
             pos = extraEnd
@@ -370,28 +439,28 @@ public class ZipFileReader<S: ZipFileSource>: @unchecked Sendable {
             let newItem: Item
             if isDirectory {
                 newItem = Item(
-                    headerOffset: Int(localHeaderOffset),
+                    headerOffset: resolvedHeaderOffset,
                     name: filename,
                     date: timestamp,
                     comment: comment,
                     flags: flags,
                     compression: compression,
                     crc32: crc32,
-                    compressedSize: Int(compressedSize),
-                    uncompressedSize: Int(uncompressedSize),
+                    compressedSize: resolvedCompressedSize,
+                    uncompressedSize: resolvedUncompressedSize,
                     kind: .directory([:])
                 )
             } else {
                 newItem = Item(
-                    headerOffset: Int(localHeaderOffset),
+                    headerOffset: resolvedHeaderOffset,
                     name: filename,
                     date: timestamp,
                     comment: comment,
                     flags: flags,
                     compression: compression,
                     crc32: crc32,
-                    compressedSize: Int(compressedSize),
-                    uncompressedSize: Int(uncompressedSize),
+                    compressedSize: resolvedCompressedSize,
+                    uncompressedSize: resolvedUncompressedSize,
                     kind: .file
                 )
             }
