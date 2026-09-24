@@ -110,7 +110,8 @@ public class ZipFileWriter<S: ZipFileSink> {
 
         // Write the local header
         try sink.write(UInt32(0x0403_4b50))  // PK<03><04>
-        try sink.write(UInt16(45))  // version 4.5 (we use Zip64)
+        // Version (Windows Explorer doesn't like us using 4.5 unless we're using Zip64)
+        try sink.write(UInt16(allowZip64 ? 45 : 20))
         try sink.write(flags)  // max compression, UTF-8 name
         try sink.write(UInt16(8))  // DEFLATE compression
         try sink.write(date.dosFileTime)  // last modified time
@@ -261,6 +262,13 @@ public class ZipFileWriter<S: ZipFileSink> {
                 try sink.write(UInt64(stream.total_out))  // Compressed size
             }
 
+            if allowZip64 && !needsZip64Sizes {
+                // We optimistically claimed version 4.5 above; this entry
+                // didn't actually need it, so patch it back down.
+                try sink.seek(crcPos - 10)
+                try sink.write(UInt16(20))
+            }
+
             try sink.seek(currentPos!)
         } else {
             // Non-seekable: write the trailing data descriptor. Its size
@@ -316,8 +324,8 @@ public class ZipFileWriter<S: ZipFileSink> {
                 needsZip64UncompressedSize || needsZip64CompressedSize || needsZip64HeaderOffset
 
             try sink.write(UInt32(0x0201_4b50))  // PK<01><02>
-            try sink.write(UInt16(45))  // version 4.5 made by
-            try sink.write(UInt16(45))  // version 4.5 needed
+            try sink.write(needsZip64 ? UInt16(45) : UInt16(20))  // version made by
+            try sink.write(needsZip64 ? UInt16(45) : UInt16(20))  // version needed
             try sink.write(flags)  // max compression, UTF-8 name
             try sink.write(UInt16(8))  // DEFLATE compression
             try sink.write(file.date.dosFileTime)  // last modified time
