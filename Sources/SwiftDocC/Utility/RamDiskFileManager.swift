@@ -492,7 +492,7 @@ public class RamDiskFileManager: FileManagerProtocol, @unchecked Sendable {
             }
 
             for (name, item) in contents {
-                let fullPath = "\(path)/\(name)"
+                let fullPath = path.isEmpty ? name : "\(path)/\(name)"
                 switch item.kind {
                     case let .file(data):
                         try zipWriter.withFile(
